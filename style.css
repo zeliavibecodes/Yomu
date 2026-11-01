@@ -353,6 +353,8 @@ select {
   background-position: calc(100% - 20px) 21px, calc(100% - 15px) 21px; background-size: 5px 5px; background-repeat: no-repeat;
 }
 .row .btn { min-height: 48px; border-radius: 12px; white-space: nowrap; }
+.dict-row { align-items: center; gap: 14px; }
+.dict-row .hint { flex: 1; margin: 0 2px; }
 /* Segmented control: a grey track with a raised white thumb */
 .seg { display: flex; background: var(--fill); border-radius: 11px; padding: 2px; gap: 2px; }
 .seg button {

@@ -45,12 +45,30 @@ Keep the original files in iCloud Drive. The copy inside Yomu is for reading, no
 - You can turn on underlines in Settings: words not in any of your decks get a dotted underline, and words you're learning a thin solid one. They're off by default to keep the page clean.
 - Readings the book itself prints are always kept, since they come from the author. So are its emphasis dots, upright numbers, bold text, indents and headings.
 
+## Progress
+
+The bottom of each page shows how far you are through the whole book and roughly how many minutes are left in the chapter. The time adjusts to how fast you actually read.
+
+## Reading offline
+
+- **Chapters you open are saved automatically.** Their readings and meanings show straight away next time, even without internet.
+- **Save a whole book** from **Contents → Offline reading → Save book**. It takes a minute or two for a novel, and you can keep reading meanwhile.
+- **Words you add while offline** wait on the phone and go to your jpdb deck as soon as you're back online.
+- **Offline dictionary** (Settings, about 25 MB): for pages that were never saved, Yomu can use a dictionary on the phone instead of jpdb. Its readings are less accurate than jpdb's, so it's only used when jpdb can't be reached.
+
+## Same place on every device
+
+In **Settings → Sync between devices**, follow the link to create a key on GitHub (keep only "gist" ticked, choose "No expiration"), paste it, and tap **Connect**. Do the same on each device. Your place in each book is then kept in a private note on your GitHub account, and Yomu picks up where you left off when you open a book or come back to the app. Only positions are stored, never books.
+
 ## Good to know
 
-- Readings need an internet connection. Without one, the book still opens, just without readings.
 - Books with copy protection (for example, Kindle books) can't be opened. Yomu tells you when this is the case.
 - Manga and other books made only of page images show the images but no readings, because there's no text to read.
 
 ## Updating the app
 
-When you get new versions of the files, upload them to the same GitHub repository (Add file → Upload files) and commit. The app picks up the change the next time you open it with an internet connection. Your books and settings stay as they are.
+Claude saves changes straight to this GitHub repository. The app picks them up the next time you open it with an internet connection. If a change doesn't show, close the app fully and open it again. Your books and settings stay as they are.
+
+## Credits
+
+Dictionary data from JMdict by the Electronic Dictionary Research and Development Group (CC BY-SA 4.0). Word splitting by kuromoji.js with the IPADIC dictionary (Apache 2.0). Readings and decks by jpdb.io.

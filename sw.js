@@ -1,12 +1,12 @@
 // Keeps the app itself available offline. Books live in IndexedDB, not here.
-const VERSION = 'yomu-v4';
-const FILES = ['./', 'index.html', 'style.css', 'app.js', 'vendor/jszip.min.js', 'manifest.webmanifest', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png'];
+const VERSION = 'yomu-v5';
+const FILES = ['./', 'index.html', 'style.css', 'app.js', 'vendor/jszip.min.js', 'offline-dict.js', 'manifest.webmanifest', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(VERSION).then((c) => c.addAll(FILES)).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', (e) => {
-  e.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== VERSION).map((k) => caches.delete(k)))).then(() => self.clients.claim()));
+  e.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== VERSION && !k.startsWith('yomu-dict')).map((k) => caches.delete(k)))).then(() => self.clients.claim()));
 });
 // Use the network when it's there so updates arrive; fall back to the saved copy offline.
 self.addEventListener('fetch', (e) => {

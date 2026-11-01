@@ -1044,15 +1044,65 @@ async function loadChapter(index, { block = 0, frag = '', page: pageArg = null, 
     }
     pump();
   }, { root: page, rootMargin: '150%' });
-  if (settings.key) reader.blocks.forEach((b) => { if (!b.dataset.parsed) reader.observer.observe(b); });
+  reader.offline = !navigator.onLine;
+  if (settings.key || dict.available) reader.blocks.forEach((b) => { if (!b.dataset.parsed) reader.observer.observe(b); });
   if (reader.blocks.every((b) => b.dataset.parsed)) pump();   // nothing to fetch on screen: go straight to saving the rest
   refreshWordStates(index);
   markGhostDirty();
   saveProgress();
 }
 
+/* =========================================================
+   Offline dictionary (fallback)
+   ========================================================= */
+const dict = { available: false, mod: null };
+async function dictModule() { return dict.mod || (dict.mod = await import('./offline-dict.js')); }
+async function refreshDictState() {
+  try { dict.available = await (await dictModule()).isDownloaded(); } catch { dict.available = false; }
+  showDictState();
+}
+function showDictState(msg) {
+  const btn = $('dictBtn');
+  if (msg) { $('dictMsg').textContent = msg; return; }
+  btn.disabled = false;
+  if (dict.available) { btn.textContent = 'Remove'; $('dictMsg').textContent = 'Downloaded. Pages without saved readings use it when jpdb can’t be reached.'; }
+  else { btn.textContent = 'Download'; $('dictMsg').textContent = 'About 25 MB. Gives readings and meanings for any book with no internet, though less accurate than jpdb.'; }
+}
+async function toggleDict() {
+  const od = await dictModule();
+  const btn = $('dictBtn');
+  btn.disabled = true;
+  try {
+    if (dict.available) { await od.remove(); dict.available = false; showDictState(); return; }
+    await od.download((f) => showDictState(`Downloading… ${Math.round(f * 100)}%`));
+    showDictState('Preparing…');
+    await od.ready();
+    dict.available = true;
+    showDictState();
+  } catch (e) {
+    showDictState(e.message || 'Download failed.');
+    btn.disabled = false;
+  }
+}
+// Mark paragraphs using the offline dictionary instead of jpdb.
+async function wrapOffline(batch) {
+  const od = await dictModule();
+  await od.ready();
+  const known = new Map();
+  for (const v of vocab.values()) if (!v.local && v.state) known.set(v.spelling, v.state);
+  for (const b of batch) {
+    if (!b.el.isConnected || b.el.dataset.parsed === 'yes') continue;
+    const { tokens, words } = od.parse(b.text, (sp) => known.get(sp) || null);
+    for (const w of Object.values(words)) if (!vocab.has(w.key)) vocab.set(w.key, w);
+    wrapTokens(b, tokens);
+    b.el.dataset.parsed = 'local';
+  }
+  countPages(); showProgress(); markGhostDirty();
+}
+
 async function pump() {
-  if (reader.running || !settings.key) return;
+  const useDictOnly = !settings.key || reader.offline;
+  if (reader.running || (useDictOnly && !dict.available) || (!settings.key && !dict.available)) return;
   reader.running = true;
   const chapterAtStart = reader.chapter;
   let errors = 0;
@@ -1074,6 +1124,12 @@ async function pump() {
       reader.queue.shift();
       batch.push({ el, ...ex });
       chars += ex.text.length;
+    }
+    if (!settings.key || reader.offline) {
+      // No jpdb right now: use the offline dictionary for what's on screen, and stop there.
+      if (!batch.length) break;
+      try { await wrapOffline(batch); } catch { break; }
+      continue;
     }
     // Nothing near the screen left: quietly fetch the rest of the chapter so it's saved.
     if (!batch.length && !reader.queue.length) {
@@ -1106,6 +1162,11 @@ async function pump() {
       batch.forEach((b) => delete b.el.dataset.parsed);
       if (batch.every((b) => b.prefetch)) { if (e.code === 'offline' || e.code === 'bad_key') break; await sleep(2000); continue; }
       const onScreen = batch.filter((b) => !b.prefetch);
+      if (e.code === 'offline' && dict.available) {
+        reader.offline = true;   // until the next chapter opens or the connection returns
+        try { await wrapOffline(onScreen); } catch {}
+        continue;
+      }
       if (e.code === 'too_many_requests' || e.code === 'api_unavailable') {
         reader.queue.unshift(...onScreen.map((b) => b.el));
         await sleep(2000);
@@ -1262,8 +1323,8 @@ function openWord(el) {
   $('wSpelling').textContent = v.spelling;
   $('wReading').textContent = v.reading !== v.spelling ? v.reading : '';
   const st = $('wState');
-  st.textContent = stateLabel(v.state);
-  st.className = 'word-state' + (v.state ? '' : ' none');
+  st.textContent = v.local && !v.state ? 'Offline dictionary' : stateLabel(v.state);
+  st.className = 'word-state' + (v.state || v.local ? '' : ' none');
   $('wMeanings').innerHTML = v.meanings.slice(0, 5).map((m) =>
     `<li>${esc(m.g.join('; '))}${m.pos.length ? `<span class="pos">${esc(m.pos.join(', '))}</span>` : ''}</li>`).join('');
   const s = current.sentence;
@@ -1490,6 +1551,9 @@ function init() {
     else pushPosition(true);   // leaving the app: save your place right away
   });
   $('ghConnectBtn').addEventListener('click', connectSync);
+  $('dictBtn').addEventListener('click', toggleDict);
+  refreshDictState();
+  window.addEventListener('online', () => { reader.offline = false; });
   $('ghInput').value = settings.ghToken;
   showSyncState();
   setTimeout(flushPending, 1500);
