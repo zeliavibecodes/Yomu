@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="Yomu">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="stylesheet" href="style.css?v=11012056">
+<link rel="stylesheet" href="style.css?v=11012112">
 <title>Yomu</title>
 </head>
 <body class="furi-unknown dir-vertical">
@@ -20,7 +20,6 @@
 <section id="library" class="screen">
   <header class="lib-head">
     <div class="lib-actions">
-      <button id="editBtn" class="text-btn" hidden>Edit</button>
       <button id="libSettingsBtn" class="icon-btn" aria-label="Settings">
         <svg class="i" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
       </button>
@@ -31,7 +30,10 @@
     <button id="tabDiscover" role="tab">Discover</button>
   </div>
   <div id="libraryView">
-  <p id="libSub" class="lib-sub"></p>
+  <div class="lib-subrow">
+    <p id="libSub" class="lib-sub"></p>
+    <button id="editBtn" class="text-btn" hidden>Edit</button>
+  </div>
   <p id="keyNotice" class="notice" hidden>Add your jpdb key in Settings to see readings and save words.</p>
   <div id="shelf" class="shelf"></div>
   <div id="emptyShelf" class="empty" hidden>
@@ -219,7 +221,7 @@
 
 <div id="toast" class="toast" hidden role="status"></div>
 
-<script src="vendor/jszip.min.js?v=11012056"></script>
-<script type="module" src="app.js?v=11012056"></script>
+<script src="vendor/jszip.min.js?v=11012112"></script>
+<script type="module" src="app.js?v=11012112"></script>
 </body>
 </html>
