@@ -2,8 +2,7 @@
 
 In order. Done items move to the bottom.
 
-1. **Add books from an Aozora Bunko link.** To discuss first.
-2. **E-ink mode.** Pure black and white, no shadows or animations, larger tap areas. Postponed.
+1. **E-ink mode.** Pure black and white, no shadows or animations, larger tap areas. Postponed.
 
 ## Done
 
@@ -18,6 +17,7 @@ In order. Done items move to the bottom.
 - Save a whole book for offline reading; words added offline are sent later
 - Same reading position on every device, through a private GitHub Gist
 - Offline dictionary (kuromoji + JMdict) used when jpdb can't be reached
+- Discover: Aozora search, level shelves, English plots for about 380 works, 'how much you know' score, add to library in one tap
 
 ## Dropped
 

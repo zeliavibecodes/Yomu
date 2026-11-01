@@ -45,6 +45,16 @@ Keep the original files in iCloud Drive. The copy inside Yomu is for reading, no
 - You can turn on underlines in Settings: words not in any of your decks get a dotted underline, and words you're learning a thin solid one. They're off by default to keep the page clean.
 - Readings the book itself prints are always kept, since they come from the author. So are its emphasis dots, upright numbers, bold text, indents and headings.
 
+## Discover
+
+Switch from **Library** to **Discover** at the top of the first screen to find free books from Aozora Bunko (青空文庫).
+
+- **Shelves** for Easy, Intermediate and Advanced, plus the books most read on Aozora.
+- **Search** all of Aozora by title or author, in kanji, kana or romaji, or by English title.
+- **Filters:** "Modern spelling" (on by default) hides books written in pre-war spelling, which is much harder to read. You can also filter by length.
+- **Tap a book** to see its English title, a short plot summary in English (for about 380 of the most-read works), the opening lines, and how many of its words you already know on jpdb. Then add it to your library in one tap.
+- Reading times use your own reading speed, so they get more accurate as you read.
+
 ## Progress
 
 The bottom of each page shows how far you are through the whole book and roughly how many minutes are left in the chapter. The time adjusts to how fast you actually read.
@@ -71,4 +81,4 @@ Claude saves changes straight to this GitHub repository. The app picks them up t
 
 ## Credits
 
-Dictionary data from JMdict by the Electronic Dictionary Research and Development Group (CC BY-SA 4.0). Word splitting by kuromoji.js with the IPADIC dictionary (Apache 2.0). Readings and decks by jpdb.io.
+Dictionary data from JMdict by the Electronic Dictionary Research and Development Group (CC BY-SA 4.0). Word splitting by kuromoji.js with the IPADIC dictionary (Apache 2.0). Readings and decks by jpdb.io. Books from Aozora Bunko, fetched through the aozorahack copy on GitHub.

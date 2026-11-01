@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="Yomu">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="stylesheet" href="style.css?v=11012017">
+<link rel="stylesheet" href="style.css?v=11012056">
 <title>Yomu</title>
 </head>
 <body class="furi-unknown dir-vertical">
@@ -26,19 +26,38 @@
       </button>
     </div>
   </header>
-  <h1 class="lib-title">Library</h1>
+  <div class="lib-tabs" role="tablist">
+    <button id="tabLibrary" class="on" role="tab">Library</button>
+    <button id="tabDiscover" role="tab">Discover</button>
+  </div>
+  <div id="libraryView">
   <p id="libSub" class="lib-sub"></p>
   <p id="keyNotice" class="notice" hidden>Add your jpdb key in Settings to see readings and save words.</p>
   <div id="shelf" class="shelf"></div>
   <div id="emptyShelf" class="empty" hidden>
     <p class="empty-big">読</p>
-    <p>Add an EPUB from Files to start reading.</p>
+    <p>Add an EPUB from Files, or find something to read in Discover.</p>
   </div>
   <label class="add-book">
     <input id="fileInput" type="file" accept=".epub,application/epub+zip">
     <svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
     <span>Add book</span>
   </label>
+  </div>
+  <div id="discoverView" hidden>
+    <div class="d-search">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+      <input id="dSearch" type="search" placeholder="Title or author, in kanji or kana" autocomplete="off" spellcheck="false" aria-label="Search Aozora Bunko">
+    </div>
+    <div class="d-chips" id="dChips">
+      <button class="chip on" data-f="modern:1">Modern spelling</button>
+      <button class="chip" data-f="length:short">Under 30 min</button>
+      <button class="chip" data-f="length:medium">30 min – 3 h</button>
+      <button class="chip" data-f="length:long">Novels</button>
+    </div>
+    <div id="discoverBody"></div>
+    <p class="hint d-credit">Books from Aozora Bunko (青空文庫), a free library of Japanese literature, made by volunteers.</p>
+  </div>
 </section>
 
 <!-- Reader -->
@@ -77,6 +96,12 @@
     <button id="knownBtn" class="btn">I know this</button>
   </div>
   <p id="wMsg" class="sheet-msg" role="status"></p>
+</section>
+
+<!-- Book details (Discover) -->
+<section id="bookSheet" class="sheet tall" hidden aria-label="Book details">
+  <div class="sheet-grip"></div>
+  <div id="dDetail"></div>
 </section>
 
 <!-- Contents sheet -->
@@ -194,7 +219,7 @@
 
 <div id="toast" class="toast" hidden role="status"></div>
 
-<script src="vendor/jszip.min.js?v=11012017"></script>
-<script type="module" src="app.js?v=11012017"></script>
+<script src="vendor/jszip.min.js?v=11012056"></script>
+<script type="module" src="app.js?v=11012056"></script>
 </body>
 </html>

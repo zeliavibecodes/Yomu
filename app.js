@@ -467,6 +467,7 @@ const reader = {
 };
 
 async function openBook(id) {
+  if (openSheetId) closeSheet();
   const rec = await db.get('books', id);
   const buf = await db.get('files', id);
   if (!rec || !buf) return toast('This book is missing. Try adding it again.');
@@ -1414,6 +1415,21 @@ function tapZone(x) {
   if (x > w * 0.7) return pager.vertical ? prevPage() : nextPage();
   $('readerBar').classList.toggle('hide');
 }
+// Library and Discover share the first screen; the large title switches between them.
+let discoverMod = null;
+async function showTab(tab) {
+  const disc = tab === 'discover';
+  $('libraryView').hidden = disc;
+  $('discoverView').hidden = !disc;
+  $('tabLibrary').classList.toggle('on', !disc);
+  $('tabDiscover').classList.toggle('on', disc);
+  $('editBtn').hidden = disc || !$('shelf').children.length;
+  try { localStorage.setItem('yomu.tab', tab); } catch {}
+  if (disc) {
+    if (!discoverMod) { discoverMod = await import('./discover.js'); discoverMod.init(); }
+    discoverMod.render();
+  }
+}
 function show(screen) {
   $('library').hidden = screen !== 'library';
   $('reader').hidden = screen !== 'reader';
@@ -1431,7 +1447,7 @@ async function renderShelf() {
   const books = (await db.all('books')).sort((a, b) => (b.lastOpened || b.added) - (a.lastOpened || a.added));
   $('emptyShelf').hidden = books.length > 0;
   $('libSub').innerHTML = books.length ? `${books.length} ${books.length === 1 ? 'book' : 'books'}<span class="jp">本棚</span>` : '<span class="jp">本棚</span>';
-  $('editBtn').hidden = books.length === 0;
+  $('editBtn').hidden = books.length === 0 || !$('discoverView').hidden;
   if (!books.length) editing = false;
   $('editBtn').textContent = editing ? 'Done' : 'Edit';
   $('shelf').innerHTML = '';
@@ -1453,18 +1469,28 @@ async function renderShelf() {
   }
 }
 
+// Store an EPUB in the library and return its id.
+async function addBookBuffer(buf, extra = {}) {
+  const epub = await openEpub(buf);
+  if (!epub.spine.length) throw new Error('empty');
+  const id = 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  await db.put('files', buf, id);
+  await db.put('books', { id, title: epub.title, author: epub.author, cover: await coverBlob(epub), chapters: epub.spine.length, lengths: await chapterLengths(epub), chapter: 0, percent: 0, added: Date.now(), ...extra });
+  renderShelf();
+  return id;
+}
+async function findAozoraBook(aozoraId) {
+  const books = await db.all('books');
+  return books.find((b) => b.aozora === aozoraId)?.id || null;
+}
+
 async function addBookFile(file) {
   if (!file) return;
   toast('Adding book…');
   try {
     const buf = await file.arrayBuffer();
-    const epub = await openEpub(buf);
-    if (!epub.spine.length) throw new Error('empty');
-    const id = 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-    await db.put('files', buf, id);
-    await db.put('books', { id, title: epub.title, author: epub.author, cover: await coverBlob(epub), chapters: epub.spine.length, lengths: await chapterLengths(epub), chapter: 0, percent: 0, added: Date.now() });
-    toast(`Added ${epub.title}`);
-    renderShelf();
+    await addBookBuffer(buf);
+    toast('Book added.');
   } catch (e) {
     toast(e instanceof CopyProtectedError
       ? 'This book has copy protection, so its text can\'t be read here.'
@@ -1512,6 +1538,9 @@ function init() {
 
   $('fileInput').addEventListener('change', (e) => { addBookFile(e.target.files[0]); e.target.value = ''; });
   $('editBtn').addEventListener('click', () => { editing = !editing; renderShelf(); });
+  $('tabLibrary').addEventListener('click', () => showTab('library'));
+  $('tabDiscover').addEventListener('click', () => showTab('discover'));
+  try { if (localStorage.getItem('yomu.tab') === 'discover') showTab('discover'); } catch {}
   $('shelf').addEventListener('click', async (e) => {
     const rm = e.target.closest('[data-remove]');
     if (rm) {
@@ -1636,6 +1665,12 @@ function init() {
 
   renderShelf();
 }
+
+// Shared with the Discover screen (discover.js).
+window.yomu = {
+  get settings() { return settings; }, speed, vocab, parseTexts, toast, openSheet, closeSheet,
+  addBookBuffer, findAozoraBook, openBook,
+};
 
 init();
 
