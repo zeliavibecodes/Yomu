@@ -463,7 +463,7 @@ async function openBook(id) {
   $('readerTitle').textContent = rec.title;
   show('reader');
   const prog = (await db.get('progress', id)) || { chapter: 0, block: 0 };
-  await loadChapter(Math.min(prog.chapter, reader.epub.spine.length - 1), { block: prog.block });
+  await loadChapter(Math.min(prog.chapter, reader.epub.spine.length - 1), { block: prog.block || 0, page: prog.page ?? null, sig: prog.sig || '' });
 }
 
 function closeBook() {
@@ -487,7 +487,94 @@ async function imageUrl(path) {
   return u;
 }
 
-async function loadChapter(index, { block = 0, frag = '' } = {}) {
+/* =========================================================
+   Pages
+   The chapter is laid out in page-sized columns, one per screen.
+   Vertical books stack their pages downward; horizontal books
+   place them side by side. Turning a page jumps exactly one screen,
+   which also suits e-ink screens later.
+   ========================================================= */
+const pager = { page: 0, count: 1, w: 0, h: 0, vertical: true, sig: '' };
+
+function layoutPages() {
+  const el = $('page');
+  const vertical = settings.direction === 'vertical';
+  const w = el.clientWidth, h = el.clientHeight;
+  const fs = settings.size;
+  const safeTop = $('safeTop').offsetHeight, safeBottom = $('safeBottom').offsetHeight;
+  let top = safeTop + 60, bottom = safeBottom + 40, side = vertical ? 26 : 22;
+  if (vertical) {
+    // Keep vertical lines to about 40 characters on tall screens.
+    const extra = Math.max(0, (h - top - bottom) - 40 * fs);
+    top += extra / 2; bottom += extra / 2;
+  } else {
+    // Keep horizontal lines to about 34 characters on wide screens.
+    side = Math.max(side, (w - 34 * fs) / 2);
+  }
+  const r = document.documentElement.style;
+  r.setProperty('--pg-top', top + 'px');
+  r.setProperty('--pg-side', side + 'px');
+  r.setProperty('--pg-col', (vertical ? h - top - bottom : h - top - bottom) + 'px');
+  r.setProperty('--pg-colw', (w - 2 * side) + 'px');
+  r.setProperty('--pg-gap', (vertical ? top + bottom : 2 * side) + 'px');
+  Object.assign(pager, { w, h, vertical });
+  pager.sig = [settings.direction, settings.size, settings.font, w, h].join('/');
+  countPages();
+}
+function countPages() {
+  const el = $('page');
+  pager.count = pager.vertical
+    ? Math.max(1, Math.ceil((el.scrollHeight - 2) / pager.h))
+    : Math.max(1, Math.ceil((el.scrollWidth - 2) / pager.w));
+}
+function goToPage(n, { save = true } = {}) {
+  countPages();
+  pager.page = Math.max(0, Math.min(pager.count - 1, n));
+  const el = $('page');
+  if (pager.vertical) { el.scrollTop = pager.page * pager.h; el.scrollLeft = 0; }
+  else { el.scrollLeft = pager.page * pager.w; el.scrollTop = 0; }
+  $('pageNum').textContent = `${pager.page + 1} / ${pager.count}`;
+  if (save) saveProgress();
+}
+function pageOf(node) {
+  if (!node) return 0;
+  const r = (node.getClientRects && node.getClientRects()[0]) || node.getBoundingClientRect();
+  const box = $('page').getBoundingClientRect();
+  const el = $('page');
+  return pager.vertical
+    ? Math.floor((r.top - box.top + el.scrollTop) / pager.h)
+    : Math.floor((r.left - box.left + el.scrollLeft) / pager.w);
+}
+function nextPage() {
+  countPages();
+  if (pager.page < pager.count - 1) goToPage(pager.page + 1);
+  else if (reader.chapter < reader.epub.spine.length - 1) loadChapter(reader.chapter + 1);
+  else toast('This is the end of the book.');
+}
+function prevPage() {
+  if (pager.page > 0) goToPage(pager.page - 1);
+  else if (reader.chapter > 0) loadChapter(reader.chapter - 1, { page: 'last' });
+}
+// The first paragraph that shows on the current page, used to keep your
+// place when the text size, direction or screen size changes.
+function currentBlock() {
+  for (const el of reader.blocks) {
+    for (const r of el.getClientRects()) {
+      const box = $('page').getBoundingClientRect();
+      if (r.bottom > box.top && r.top < box.bottom && r.right > box.left && r.left < box.right) return +el.dataset.b;
+    }
+  }
+  return 0;
+}
+function relayoutKeeping(block) {
+  if (!reader.book) return;
+  requestAnimationFrame(() => {
+    layoutPages();
+    goToPage(pageOf(reader.blocks[block]));
+  });
+}
+
+async function loadChapter(index, { block = 0, frag = '', page: pageArg = null, sig = '' } = {}) {
   reader.stopped = true;
   reader.observer?.disconnect();
   reader.queue = [];
@@ -540,14 +627,15 @@ async function loadChapter(index, { block = 0, frag = '' } = {}) {
   reader.blocks.forEach((el, i) => (el.dataset.b = i));
   reader.blocks.forEach(addTateChuYoko);
 
-  // Restore position
+  // Lay out pages and go to the right one.
   const page = $('page');
-  page.scrollTop = 0;
-  page.scrollLeft = 0;
-  requestAnimationFrame(() => {
-    const target = frag ? root.querySelector('#' + CSS.escape(frag)) : block > 0 ? reader.blocks[block] : null;
-    if (target) target.scrollIntoView({ block: 'start', inline: 'start' });
-  });
+  layoutPages();
+  await new Promise((r) => requestAnimationFrame(r));
+  layoutPages();
+  if (frag) goToPage(pageOf(root.querySelector('#' + CSS.escape(frag))));
+  else if (pageArg === 'last') goToPage(Infinity);
+  else if (typeof pageArg === 'number' && sig === pager.sig) goToPage(pageArg);
+  else goToPage(block > 0 ? pageOf(reader.blocks[block]) : 0);
 
   // Parse paragraphs as they come near the screen.
   reader.stopped = false;
@@ -560,7 +648,7 @@ async function loadChapter(index, { block = 0, frag = '' } = {}) {
       }
     }
     pump();
-  }, { root: page, rootMargin: '1200px' });
+  }, { root: page, rootMargin: '150%' });
   if (settings.key) reader.blocks.forEach((b) => reader.observer.observe(b));
   saveProgress();
 }
@@ -572,7 +660,10 @@ async function pump() {
   let errors = 0;
   while (reader.queue.length && !reader.stopped && reader.chapter === chapterAtStart) {
     // Take paragraphs in reading order, up to about 2,500 characters at a time.
-    reader.queue.sort((a, b) => a.dataset.b - b.dataset.b);
+    // Current page first, then the pages after it, then earlier ones.
+    const cur = currentBlock();
+    const rank = (el) => (+el.dataset.b >= cur ? +el.dataset.b - cur : 1e6 + cur - el.dataset.b);
+    reader.queue.sort((a, b) => rank(a) - rank(b));
     const batch = [];
     let chars = 0;
     while (reader.queue.length && batch.length < 40) {
@@ -591,6 +682,8 @@ async function pump() {
         wrapTokens(b, tokens[i]);
         b.el.dataset.parsed = 'yes';
       });
+      countPages();
+      $('pageNum').textContent = `${pager.page + 1} / ${pager.count}`;
       errors = 0;
     } catch (e) {
       batch.forEach((b) => delete b.el.dataset.parsed);
@@ -624,13 +717,7 @@ function saveProgress() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     if (!reader.book) return;
-    const page = $('page').getBoundingClientRect();
-    let block = 0;
-    for (const el of reader.blocks) {
-      const r = el.getBoundingClientRect();
-      if (r.bottom > page.top && r.top < page.bottom && r.right > page.left && r.left < page.right) { block = +el.dataset.b; break; }
-    }
-    db.put('progress', { chapter: reader.chapter, block }, reader.book.id);
+    db.put('progress', { chapter: reader.chapter, block: currentBlock(), page: pager.page, sig: pager.sig }, reader.book.id);
     reader.book.chapter = reader.chapter;
     db.put('books', reader.book);
   }, 400);
@@ -732,6 +819,13 @@ function toast(msg) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => ($('toast').hidden = true), 3500);
 }
+// Left and right thirds of the screen turn pages; the middle shows or hides the top bar.
+function tapZone(x) {
+  const w = window.innerWidth;
+  if (x < w * 0.3) return pager.vertical ? nextPage() : prevPage();
+  if (x > w * 0.7) return pager.vertical ? prevPage() : nextPage();
+  $('readerBar').classList.toggle('hide');
+}
 function show(screen) {
   $('library').hidden = screen !== 'library';
   $('reader').hidden = screen !== 'reader';
@@ -816,14 +910,6 @@ function fillDecks(decks) {
   }
   try { localStorage.setItem('yomu.decks', JSON.stringify(decks)); } catch {}
 }
-function currentBlock() {
-  const page = $('page').getBoundingClientRect();
-  for (const el of reader.blocks) {
-    const r = el.getBoundingClientRect();
-    if (r.bottom > page.top && r.top < page.bottom && r.right > page.left && r.left < page.right) return +el.dataset.b;
-  }
-  return 0;
-}
 
 /* =========================================================
    Wiring
@@ -884,9 +970,26 @@ function init() {
     const w = e.target.closest('.w');
     if (w) return openWord(w);
     if (window.getSelection()?.toString()) return;
-    $('readerBar').classList.toggle('hide');
+    tapZone(e.clientX);
   });
-  $('page').addEventListener('scroll', saveProgress, { passive: true });
+  // Taps in the margins around the text also turn pages.
+  $('page').addEventListener('click', (e) => { if (e.target === $('page')) tapZone(e.clientX); });
+  let touch = null;
+  $('page').addEventListener('touchstart', (e) => {
+    const t = e.touches[0];
+    touch = e.touches.length === 1 ? { x: t.clientX, y: t.clientY } : null;
+  }, { passive: true });
+  $('page').addEventListener('touchend', (e) => {
+    if (!touch) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - touch.x, dy = t.clientY - touch.y;
+    touch = null;
+    if (Math.abs(dx) < 40 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    e.preventDefault();
+    // Japanese vertical books turn right-to-left: swipe toward the right for the next page.
+    if ((dx > 0) === pager.vertical) nextPage(); else prevPage();
+  });
+  window.addEventListener('resize', () => { if (reader.book) relayoutKeeping(currentBlock()); });
 
   $('addBtn').addEventListener('click', () => {
     const name = $('deckSelect').selectedOptions[0]?.textContent || 'your deck';
@@ -902,22 +1005,27 @@ function init() {
     const block = reader.book ? currentBlock() : 0;
     settings[seg.dataset.setting] = b.dataset.value;
     saveSettings();
-    if (seg.dataset.setting === 'direction' && reader.book) {
-      requestAnimationFrame(() => reader.blocks[block]?.scrollIntoView({ block: 'start', inline: 'start' }));
-    }
+    if (['direction', 'font'].includes(seg.dataset.setting)) relayoutKeeping(block);
   }));
   const resize = (d) => {
     const block = reader.book ? currentBlock() : 0;
     settings.size = Math.max(14, Math.min(34, settings.size + d));
     saveSettings();
-    if (reader.book) requestAnimationFrame(() => reader.blocks[block]?.scrollIntoView({ block: 'start', inline: 'start' }));
+    relayoutKeeping(block);
   };
   $('sizeDown').addEventListener('click', () => resize(-2));
   $('sizeUp').addEventListener('click', () => resize(2));
   $('sentenceToggle').addEventListener('change', (e) => { settings.sentence = e.target.checked; saveSettings(); });
   $('marksToggle').addEventListener('change', (e) => { settings.marks = e.target.checked; saveSettings(); });
 
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSheet(); });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') return closeSheet();
+    if (!reader.book || openSheetId) return;
+    const forward = pager.vertical ? 'ArrowLeft' : 'ArrowRight';
+    const back = pager.vertical ? 'ArrowRight' : 'ArrowLeft';
+    if (e.key === forward || e.key === 'PageDown' || e.key === ' ') { e.preventDefault(); nextPage(); }
+    else if (e.key === back || e.key === 'PageUp') { e.preventDefault(); prevPage(); }
+  });
 
   // Ask the browser to keep stored books even when space runs low.
   navigator.storage?.persist?.().catch(() => {});

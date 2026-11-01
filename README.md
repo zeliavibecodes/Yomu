@@ -38,7 +38,8 @@ Keep the original files in iCloud Drive. The copy inside Yomu is for reading, no
 - **Tap a word** to see its reading, meanings, and the sentence it's in.
 - **Add to deck** adds it to your chosen deck, with the sentence attached (you can turn that off in Settings).
 - **I know this** marks it as known on jpdb, so it stops showing readings.
-- **Tap anywhere else** to hide or show the top bar.
+- **Turn pages** by tapping the left or right side of the screen, or swiping. Vertical books read right to left, like a printed Japanese book: tap the left side or swipe right for the next page. Horizontal books are the other way round.
+- **Tap the middle** of the page to hide or show the top bar.
 - **Settings → Show readings over** chooses whether readings appear over all words, only words you don't know yet, or none.
 - **Settings → Appearance** switches between light, dark, or matching your phone. **Typeface** switches between Mincho (the usual book style) and Gothic.
 - Words not in any of your decks have a dotted underline. Words you're learning have a thin solid underline. You can turn these off in Settings.

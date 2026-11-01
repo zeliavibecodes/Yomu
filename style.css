@@ -125,7 +125,15 @@ button { cursor: pointer; }
 .reader-title { flex: 1; text-align: center; font-size: 14px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .reader-bar-actions { display: flex; gap: 10px; }
 
-.page { flex: 1; overflow: auto; -webkit-overflow-scrolling: touch; scroll-padding: calc(var(--safe-top) + 70px) 44px calc(var(--safe-bottom) + 44px) 26px; }
+.page { flex: 1; overflow: hidden; touch-action: pan-y pinch-zoom; }
+.safe-probe { position: fixed; left: 0; width: 0; visibility: hidden; pointer-events: none; }
+.safe-probe.top { top: 0; height: env(safe-area-inset-top, 0px); }
+.safe-probe.bottom { bottom: 0; height: env(safe-area-inset-bottom, 0px); }
+.page-num {
+  position: absolute; left: 0; right: 0; bottom: calc(var(--safe-bottom) + 12px);
+  text-align: center; font-size: 12px; color: var(--muted); pointer-events: none;
+  font-variant-numeric: tabular-nums;
+}
 
 /* Japanese text, following the W3C "Requirements for Japanese Text Layout":
    - Space between lines of half to one character; ruby sits in that space,
@@ -147,21 +155,23 @@ button { cursor: pointer; }
   hanging-punctuation: allow-end;
   font-kerning: none;
   text-spacing-trim: space-first;
-  padding: calc(var(--safe-top) + 64px) 22px calc(var(--safe-bottom) + 56px);
 }
-.dir-horizontal .text { max-width: 34em; margin: 0 auto; }
-/* The scrolling area itself runs right-to-left, so a chapter opens at its first line */
-.dir-vertical .page { writing-mode: vertical-rl; }
+/* Pages: the chapter flows through screen-sized columns.
+   Sizes come from the app (--pg-*) so each page fits the screen exactly. */
+.text {
+  box-sizing: content-box;
+  column-fill: auto;
+  column-gap: var(--pg-gap);
+  column-width: var(--pg-colw);
+  height: var(--pg-col);
+  width: var(--pg-colw);
+  padding: var(--pg-top) var(--pg-side) 0;
+}
 .dir-vertical .text {
   writing-mode: vertical-rl;
   text-orientation: mixed;
-  height: 100%;
   line-height: 2;   /* longer lines (30+ characters) read best with about a full character between them */
-  padding: calc(var(--safe-top) + 60px) 26px calc(var(--safe-bottom) + 44px);
-}
-/* Long screens: keep vertical lines under about 40 characters so the eye doesn't travel too far */
-@media (min-height: 900px) {
-  .dir-vertical .text { padding-top: max(calc(var(--safe-top) + 60px), calc((100vh - 40 * var(--text-size)) / 2)); padding-bottom: max(calc(var(--safe-bottom) + 44px), calc((100vh - 40 * var(--text-size)) / 2)); }
+  column-width: var(--pg-col);
 }
 
 /* Paragraphs: no extra space between them, as in print. Indents come from the book. */
@@ -172,8 +182,7 @@ button { cursor: pointer; }
   margin: 1.5em 0 1em;
 }
 .dir-vertical .text h1, .dir-vertical .text h2, .dir-vertical .text h3, .dir-vertical .text h4 { margin: 0 1em 0 1.5em; }
-.text img, .text svg { max-width: 100%; max-height: 80vh; height: auto; filter: var(--img-filter); }
-.dir-vertical .text img, .dir-vertical .text svg { max-height: 100%; max-width: 80vw; }
+.text img, .text svg { max-width: var(--pg-colw); max-height: var(--pg-col); height: auto; filter: var(--img-filter); break-inside: avoid; }
 .text a { color: inherit; }
 
 /* Readings: half the size of the text, the standard in print */
@@ -196,12 +205,12 @@ button { cursor: pointer; }
 .furi-none .text ruby.jf rt,
 .furi-unknown .text .w.st-known ruby.jf rt { visibility: hidden; }
 
-.chapter-end { display: flex; justify-content: center; padding: 3em 0; font-family: var(--gothic); }
+.chapter-end { display: flex; justify-content: center; align-items: center; padding: 2em 0; font-family: var(--gothic); break-inside: avoid; }
 .chapter-end .btn { writing-mode: horizontal-tb; }
 
 .status {
   position: absolute; left: 50%; transform: translateX(-50%);
-  bottom: calc(var(--safe-bottom) + 12px);
+  bottom: calc(var(--safe-bottom) + 34px);
   font-size: 12px; color: var(--muted); background: var(--paper);
   padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line);
 }
