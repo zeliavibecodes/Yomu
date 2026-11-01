@@ -42,7 +42,7 @@ Keep the original files in iCloud Drive. The copy inside Yomu is for reading, no
 - **Tap the middle** of the page to hide or show the top bar.
 - **Settings → Show readings over** chooses whether readings appear over all words, only words you don't know yet, or none.
 - **Settings → Appearance** switches between light, dark, or matching your phone. **Typeface** switches between Mincho (the usual book style) and Gothic.
-- Words not in any of your decks have a dotted underline. Words you're learning have a thin solid underline. You can turn these off in Settings.
+- You can turn on underlines in Settings: words not in any of your decks get a dotted underline, and words you're learning a thin solid one. They're off by default to keep the page clean.
 - Readings the book itself prints are always kept, since they come from the author. So are its emphasis dots, upright numbers, bold text, indents and headings.
 
 ## Good to know

@@ -8,7 +8,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 /* =========================================================
    Settings (small values, kept in localStorage)
    ========================================================= */
-const DEFAULTS = { key: '', deck: '', furigana: 'unknown', direction: 'vertical', size: 19, sentence: true, theme: 'auto', font: 'mincho', marks: true };
+const DEFAULTS = { key: '', deck: '', furigana: 'unknown', direction: 'vertical', size: 19, sentence: true, theme: 'auto', font: 'mincho', underline: false };
 const settings = { ...DEFAULTS };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('yomu.settings') || '{}')); } catch {}
 function saveSettings() {
@@ -18,7 +18,7 @@ function saveSettings() {
 function applySettings() {
   document.body.classList.remove('furi-all', 'furi-unknown', 'furi-none', 'dir-vertical', 'dir-horizontal', 'font-mincho', 'font-gothic');
   document.body.classList.add('furi-' + settings.furigana, 'dir-' + settings.direction, 'font-' + settings.font);
-  document.body.classList.toggle('no-marks', !settings.marks);
+  document.body.classList.toggle('no-marks', !settings.underline);
   const root = document.documentElement;
   if (settings.theme === 'auto') delete root.dataset.theme;
   else root.dataset.theme = settings.theme;
@@ -31,7 +31,7 @@ function applySettings() {
     seg.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.value === v));
   });
   $('sentenceToggle').checked = settings.sentence;
-  $('marksToggle').checked = settings.marks;
+  $('marksToggle').checked = settings.underline;
   $('keyNotice').hidden = !!settings.key;
 }
 
@@ -1018,7 +1018,7 @@ function init() {
   $('sizeDown').addEventListener('click', () => resize(-2));
   $('sizeUp').addEventListener('click', () => resize(2));
   $('sentenceToggle').addEventListener('change', (e) => { settings.sentence = e.target.checked; saveSettings(); });
-  $('marksToggle').addEventListener('change', (e) => { settings.marks = e.target.checked; saveSettings(); });
+  $('marksToggle').addEventListener('change', (e) => { settings.underline = e.target.checked; saveSettings(); });
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') return closeSheet();

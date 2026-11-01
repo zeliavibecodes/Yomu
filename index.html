@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="Yomu">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="stylesheet" href="style.css?v=11011824">
+<link rel="stylesheet" href="style.css?v=11011828">
 <title>Yomu</title>
 </head>
 <body class="furi-unknown dir-vertical">
@@ -115,6 +115,11 @@
     <p class="hint">New words are the ones jpdb doesn't have as known for you.</p>
   </div>
 
+  <div class="field check">
+    <input id="marksToggle" type="checkbox">
+    <label for="marksToggle">Underline words you don't know yet</label>
+  </div>
+
   <div class="field">
     <span class="label">Appearance</span>
     <div class="seg" data-setting="theme">
@@ -151,11 +156,6 @@
   </div>
 
   <div class="field check settings-group">
-    <input id="marksToggle" type="checkbox">
-    <label for="marksToggle">Underline words not in your decks</label>
-  </div>
-
-  <div class="field check">
     <input id="sentenceToggle" type="checkbox">
     <label for="sentenceToggle">Save the sentence with each new card</label>
   </div>
@@ -163,7 +163,7 @@
 
 <div id="toast" class="toast" hidden role="status"></div>
 
-<script src="vendor/jszip.min.js?v=11011824"></script>
-<script type="module" src="app.js?v=11011824"></script>
+<script src="vendor/jszip.min.js?v=11011828"></script>
+<script type="module" src="app.js?v=11011828"></script>
 </body>
 </html>
