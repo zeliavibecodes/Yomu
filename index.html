@@ -19,12 +19,15 @@
 <!-- Library -->
 <section id="library" class="screen">
   <header class="lib-head">
-    <h1 class="lib-title">本棚</h1>
     <div class="lib-actions">
       <button id="editBtn" class="text-btn" hidden>Edit</button>
-      <button id="libSettingsBtn" class="text-btn">Settings</button>
+      <button id="libSettingsBtn" class="icon-btn" aria-label="Settings">
+        <svg class="i" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
+      </button>
     </div>
   </header>
+  <h1 class="lib-title">Library</h1>
+  <p id="libSub" class="lib-sub"></p>
   <p id="keyNotice" class="notice" hidden>Add your jpdb key in Settings to see readings and save words.</p>
   <div id="shelf" class="shelf"></div>
   <div id="emptyShelf" class="empty" hidden>
@@ -33,6 +36,7 @@
   </div>
   <label class="add-book">
     <input id="fileInput" type="file" accept=".epub,application/epub+zip">
+    <svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
     <span>Add book</span>
   </label>
 </section>
@@ -40,11 +44,15 @@
 <!-- Reader -->
 <section id="reader" class="screen" hidden>
   <header id="readerBar" class="reader-bar">
-    <button id="backBtn" class="text-btn">Library</button>
+    <button id="backBtn" class="icon-btn" aria-label="Back to library">
+      <svg class="i" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>
+    </button>
     <span id="readerTitle" class="reader-title"></span>
     <div class="reader-bar-actions">
-      <button id="tocBtn" class="text-btn">Contents</button>
-      <button id="readerSettingsBtn" class="text-btn" aria-label="Reading settings">Aa</button>
+      <button id="tocBtn" class="icon-btn" aria-label="Contents">
+        <svg class="i" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="0.6"/><circle cx="4.5" cy="12" r="0.6"/><circle cx="4.5" cy="18" r="0.6"/></svg>
+      </button>
+      <button id="readerSettingsBtn" class="icon-btn aa" aria-label="Reading settings">あ</button>
     </div>
   </header>
   <div id="page" class="page"><article id="text" class="text"></article></div>
@@ -97,13 +105,14 @@
     <select id="deckSelect" disabled><option>Check your key first</option></select>
   </div>
 
-  <div class="field">
+  <div class="field settings-group">
     <span class="label">Show readings over</span>
     <div class="seg" data-setting="furigana">
       <button data-value="all">All words</button>
-      <button data-value="unknown">Words you don't know</button>
-      <button data-value="none">No words</button>
+      <button data-value="unknown">New words</button>
+      <button data-value="none">None</button>
     </div>
+    <p class="hint">New words are the ones jpdb doesn't have as known for you.</p>
   </div>
 
   <div class="field">
@@ -141,7 +150,7 @@
     </div>
   </div>
 
-  <div class="field check">
+  <div class="field check settings-group">
     <input id="marksToggle" type="checkbox">
     <label for="marksToggle">Underline words not in your decks</label>
   </div>

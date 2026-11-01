@@ -842,6 +842,7 @@ async function renderShelf() {
   coverUrls.splice(0).forEach((u) => URL.revokeObjectURL(u));
   const books = (await db.all('books')).sort((a, b) => (b.lastOpened || b.added) - (a.lastOpened || a.added));
   $('emptyShelf').hidden = books.length > 0;
+  $('libSub').innerHTML = books.length ? `${books.length} ${books.length === 1 ? 'book' : 'books'}<span class="jp">本棚</span>` : '<span class="jp">本棚</span>';
   $('editBtn').hidden = books.length === 0;
   if (!books.length) editing = false;
   $('editBtn').textContent = editing ? 'Done' : 'Edit';
@@ -854,10 +855,11 @@ async function renderShelf() {
       const u = URL.createObjectURL(b.cover);
       coverUrls.push(u);
       cover = `<div class="book-cover"><img src="${u}" alt=""></div>`;
-    } else cover = `<div class="book-cover"><div class="book-spine">${esc(b.title)}</div></div>`;
-    const prog = b.chapters > 1 ? `Chapter ${(b.chapter || 0) + 1} of ${b.chapters}` : b.lastOpened ? 'Started' : 'Not started';
+    } else cover = `<div class="book-cover"><div class="book-spine">${esc(b.title)}${b.author ? `<span class="sa">${esc(b.author)}</span>` : ''}</div></div>`;
+    const prog = !b.lastOpened ? 'Not started' : b.chapters > 1 ? `Chapter ${(b.chapter || 0) + 1} of ${b.chapters}` : 'Started';
+    const pct = b.lastOpened && b.chapters ? Math.round(((b.chapter || 0) + 1) / b.chapters * 100) : 0;
     el.innerHTML = `<button class="book" data-open="${b.id}" aria-label="Open ${esc(b.title)}">${cover}
-      <div class="book-meta"><div class="t">${esc(b.title)}</div><div class="p">${prog}</div></div></button>
+      <div class="book-meta"><div class="t">${esc(b.title)}</div><div class="p">${b.lastOpened ? prog : esc(b.author || 'Not started')}</div>${pct ? `<div class="book-bar"><span style="width:${pct}%"></span></div>` : ''}</div></button>
       ${editing ? `<button class="book-remove" data-remove="${b.id}" aria-label="Remove ${esc(b.title)}">✕</button>` : ''}`;
     $('shelf').appendChild(el);
   }
