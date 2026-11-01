@@ -1,0 +1,282 @@
+/* Colors
+   Light: a soft off-white page and near-black ink (about 14:1 contrast).
+   Pure white on pure black causes glare and halo around thin Mincho strokes,
+   so dark mode uses a dark grey page and warm light-grey ink (about 12:1). */
+:root {
+  --paper: #F7F6F2;
+  --ink: #22242A;
+  --muted: #6A6E78;
+  --ruby: #4E525C;
+  --line: #E1E0DA;
+  --raised: #FFFFFF;
+  --ai: #2B4C8C;          /* 藍 indigo: the one accent */
+  --ai-soft: rgba(43, 76, 140, 0.10);
+  --learning: #8C8F99;
+  --scrim: rgba(20, 22, 28, 0.28);
+  --img-filter: none;
+  --mincho: "Hiragino Mincho ProN", "Hiragino Mincho Pro", "YuMincho", "Yu Mincho", "Noto Serif CJK JP", "Noto Serif JP", serif;
+  --gothic: "Hiragino Sans", "Hiragino Kaku Gothic ProN", -apple-system, "Noto Sans CJK JP", system-ui, sans-serif;
+  --body-font: var(--mincho);
+  --text-size: 19px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #16181D; --ink: #D9D6CE; --muted: #959AA4; --ruby: #A9ADB6; --line: #2C2F37; --raised: #1F2128;
+    --ai: #94ACDB; --ai-soft: rgba(148, 172, 219, 0.16); --learning: #747883; --scrim: rgba(0, 0, 0, 0.55);
+    --img-filter: brightness(0.85);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #16181D; --ink: #D9D6CE; --muted: #959AA4; --ruby: #A9ADB6; --line: #2C2F37; --raised: #1F2128;
+  --ai: #94ACDB; --ai-soft: rgba(148, 172, 219, 0.16); --learning: #747883; --scrim: rgba(0, 0, 0, 0.55);
+  --img-filter: brightness(0.85);
+  color-scheme: dark;
+}
+.font-gothic { --body-font: var(--gothic); }
+
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--gothic);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+button, input, select { font: inherit; color: inherit; }
+.f-mincho { font-family: var(--mincho); }
+.f-gothic { font-family: var(--gothic); }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--ai); outline-offset: 2px; }
+[hidden] { display: none !important; }
+
+.screen { position: fixed; inset: 0; display: flex; flex-direction: column; }
+
+.text-btn {
+  background: none; border: 0; padding: 10px 4px; color: var(--ai);
+  font-size: 16px; min-height: 44px;
+}
+
+/* ---------- Library ---------- */
+#library { padding: calc(var(--safe-top) + 8px) 16px 0; overflow-y: auto; }
+.lib-head { display: flex; align-items: center; justify-content: space-between; }
+.lib-title {
+  font-family: var(--mincho); font-weight: 600; font-size: 34px;
+  letter-spacing: 0.08em; margin: 8px 0 12px;
+}
+.lib-actions { display: flex; gap: 12px; }
+.notice {
+  margin: 0 0 16px; padding: 12px 14px; border-radius: 10px;
+  background: var(--ai-soft); color: var(--ink); font-size: 15px;
+}
+.shelf {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 22px 16px; padding-bottom: 120px;
+}
+.book-item { position: relative; }
+.book { width: 100%; display: flex; flex-direction: column; gap: 8px; text-align: left; background: none; border: 0; padding: 0; }
+.book-cover {
+  aspect-ratio: 2 / 3; width: 100%; border-radius: 3px 6px 6px 3px; overflow: hidden;
+  background: var(--raised); border: 1px solid var(--line);
+  box-shadow: inset 4px 0 0 rgba(0,0,0,0.06);
+}
+.book-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* Books without a cover image become a spine with a vertical title */
+.book-spine {
+  height: 100%; padding: 12px 10px; display: flex; justify-content: center;
+  writing-mode: vertical-rl; font-family: var(--mincho); font-size: 17px;
+  line-height: 1.35; letter-spacing: 0.12em; overflow: hidden;
+  border-left: 5px solid var(--ai);
+}
+.book-meta { font-size: 13px; line-height: 1.35; }
+.book-meta .t { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.book-meta .p { color: var(--muted); font-size: 12px; margin-top: 2px; }
+.book-remove {
+  position: absolute; top: -8px; right: -8px; width: 30px; height: 30px; border-radius: 50%;
+  border: 0; background: var(--ink); color: var(--paper); font-size: 16px; line-height: 30px;
+}
+.empty { text-align: center; color: var(--muted); padding: 60px 20px; }
+.empty-big { font-family: var(--mincho); font-size: 72px; color: var(--line); margin: 0 0 8px; line-height: 1; }
+.add-book {
+  position: fixed; left: 50%; transform: translateX(-50%);
+  bottom: calc(var(--safe-bottom) + 20px);
+  background: var(--ai); color: var(--paper); border-radius: 999px;
+  padding: 14px 28px; font-weight: 600; box-shadow: 0 6px 20px rgba(0,0,0,0.18);
+}
+.add-book input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.add-book:focus-within { outline: 2px solid var(--ink); outline-offset: 3px; }
+
+/* ---------- Reader ---------- */
+.reader-bar {
+  position: absolute; top: 0; left: 0; right: 0; z-index: 5;
+  display: flex; align-items: center; gap: 8px;
+  padding: calc(var(--safe-top) + 2px) 12px 2px;
+  background: var(--paper); border-bottom: 1px solid var(--line);
+  transition: transform 0.2s ease;
+}
+.reader-bar.hide { transform: translateY(-110%); }
+.reader-title { flex: 1; text-align: center; font-size: 14px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.reader-bar-actions { display: flex; gap: 10px; }
+
+.page { flex: 1; overflow: auto; -webkit-overflow-scrolling: touch; scroll-padding: calc(var(--safe-top) + 70px) 44px calc(var(--safe-bottom) + 44px) 26px; }
+
+/* Japanese text, following the W3C "Requirements for Japanese Text Layout":
+   - Space between lines of half to one character; ruby sits in that space,
+     so lines are spaced to fit it without the text jumping.
+   - Lines of at most about 40 characters across, 52 down.
+   - Both edges aligned, with the line-breaking rules (no 。、」 at the start
+     of a line, no 「 at the end), and 。、 allowed to hang past the edge.
+   - Full-width spacing kept for body text (proportional spacing is for headings). */
+.text {
+  font-family: var(--body-font);
+  font-size: var(--text-size);
+  font-weight: 400;
+  line-height: 1.8;
+  text-align: justify;
+  text-justify: inter-character;
+  line-break: strict;
+  word-break: normal;
+  overflow-wrap: anywhere;
+  hanging-punctuation: allow-end;
+  font-kerning: none;
+  text-spacing-trim: space-first;
+  padding: calc(var(--safe-top) + 64px) 22px calc(var(--safe-bottom) + 56px);
+}
+.dir-horizontal .text { max-width: 34em; margin: 0 auto; }
+/* The scrolling area itself runs right-to-left, so a chapter opens at its first line */
+.dir-vertical .page { writing-mode: vertical-rl; }
+.dir-vertical .text {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  height: 100%;
+  line-height: 2;   /* longer lines (30+ characters) read best with about a full character between them */
+  padding: calc(var(--safe-top) + 60px) 26px calc(var(--safe-bottom) + 44px);
+}
+/* Long screens: keep vertical lines under about 40 characters so the eye doesn't travel too far */
+@media (min-height: 900px) {
+  .dir-vertical .text { padding-top: max(calc(var(--safe-top) + 60px), calc((100vh - 40 * var(--text-size)) / 2)); padding-bottom: max(calc(var(--safe-bottom) + 44px), calc((100vh - 40 * var(--text-size)) / 2)); }
+}
+
+/* Paragraphs: no extra space between them, as in print. Indents come from the book. */
+.text p, .text div { margin: 0; }
+.text h1, .text h2, .text h3, .text h4 {
+  font-family: var(--gothic); font-weight: 600; font-size: 1.15em; line-height: 1.6;
+  font-feature-settings: "palt" 1;  /* proportional spacing reads well at heading sizes */
+  margin: 1.5em 0 1em;
+}
+.dir-vertical .text h1, .dir-vertical .text h2, .dir-vertical .text h3, .dir-vertical .text h4 { margin: 0 1em 0 1.5em; }
+.text img, .text svg { max-width: 100%; max-height: 80vh; height: auto; filter: var(--img-filter); }
+.dir-vertical .text img, .dir-vertical .text svg { max-height: 100%; max-width: 80vw; }
+.text a { color: inherit; }
+
+/* Readings: half the size of the text, the standard in print */
+.text ruby { ruby-position: over; }
+.text rt {
+  font-size: 0.5em; line-height: 1; font-family: var(--gothic); font-weight: 400;
+  color: var(--ruby); letter-spacing: 0; text-emphasis: none; -webkit-text-emphasis: none;
+}
+.text ruby:not(.jf) rt { color: var(--ink); }
+
+/* Two-digit numbers set upright within a vertical line (縦中横) */
+.dir-vertical .text .tcy { text-combine-upright: all; -webkit-text-combine: horizontal; }
+
+/* Words found by jpdb */
+.w { border-radius: 2px; cursor: pointer; }
+.w.st-none { text-decoration: underline dotted color-mix(in srgb, var(--ai) 70%, transparent); text-decoration-thickness: 1.5px; text-underline-offset: 0.35em; }
+.w.st-learning { text-decoration: underline solid color-mix(in srgb, var(--learning) 60%, transparent); text-decoration-thickness: 1px; text-underline-offset: 0.35em; }
+.w.sel { background: var(--ai-soft); }
+.no-marks .w.st-none, .no-marks .w.st-learning { text-decoration: none; }
+.furi-none .text ruby.jf rt,
+.furi-unknown .text .w.st-known ruby.jf rt { visibility: hidden; }
+
+.chapter-end { display: flex; justify-content: center; padding: 3em 0; font-family: var(--gothic); }
+.chapter-end .btn { writing-mode: horizontal-tb; }
+
+.status {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  bottom: calc(var(--safe-bottom) + 12px);
+  font-size: 12px; color: var(--muted); background: var(--paper);
+  padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line);
+}
+
+/* ---------- Sheets ---------- */
+.scrim { position: fixed; inset: 0; background: var(--scrim); z-index: 20; }
+.sheet {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 21;
+  max-height: 72vh; overflow-y: auto;
+  background: var(--raised); border-radius: 16px 16px 0 0;
+  padding: 8px 20px calc(var(--safe-bottom) + 20px);
+  box-shadow: 0 -8px 30px rgba(0,0,0,0.15);
+  animation: rise 0.18s ease-out;
+}
+.sheet.tall { max-height: 86vh; }
+@keyframes rise { from { transform: translateY(30px); opacity: 0.4; } }
+@media (prefers-reduced-motion: reduce) { .sheet { animation: none; } .reader-bar { transition: none; } }
+.sheet-grip { width: 36px; height: 4px; border-radius: 2px; background: var(--line); margin: 0 auto 12px; }
+.sheet-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.sheet-title { font-size: 18px; margin: 4px 0; }
+
+.word-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.word-main { font-family: var(--body-font); font-size: 40px; line-height: 1.2; ruby-position: over; }
+.word-main rt { font-family: var(--gothic); font-size: 15px; color: var(--muted); letter-spacing: 0.05em; }
+.word-state { font-size: 13px; color: var(--muted); padding-bottom: 8px; white-space: nowrap; }
+.word-state.none { color: var(--ai); }
+.meanings { margin: 8px 0 12px; padding-left: 1.4em; font-size: 16px; }
+.meanings li { margin: 4px 0; }
+.meanings .pos { color: var(--muted); font-size: 12px; margin-left: 6px; }
+.word-sentence {
+  font-family: var(--body-font); font-size: 15px; color: var(--muted);
+  margin: 0 0 16px; padding-left: 12px; border-left: 2px solid var(--line);
+}
+.word-sentence b { color: var(--ink); font-weight: 600; }
+.sheet-actions { display: flex; gap: 10px; }
+.sheet-actions .btn { flex: 1; }
+.sheet-actions .btn.primary { flex: 1.6; }
+.sheet-msg { min-height: 1.4em; margin: 10px 0 0; font-size: 14px; color: var(--muted); text-align: center; }
+
+.btn {
+  min-height: 44px; padding: 10px 16px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--paper); font-weight: 500;
+}
+.btn.primary { background: var(--ai); border-color: var(--ai); color: var(--paper); font-weight: 600; }
+.btn:disabled { opacity: 0.5; }
+
+.toc { list-style: none; margin: 0; padding: 0; }
+.toc button {
+  width: 100%; text-align: left; background: none; border: 0;
+  border-bottom: 1px solid var(--line); padding: 14px 2px; font-family: var(--mincho); font-size: 16px;
+}
+.toc button.current { color: var(--ai); font-weight: 600; }
+
+.field { margin-bottom: 22px; }
+.field > label, .field .label { display: block; font-weight: 600; font-size: 15px; margin-bottom: 6px; }
+.hint { color: var(--muted); font-size: 13px; margin: 0 0 8px; }
+.row { display: flex; gap: 8px; align-items: center; }
+.row input { flex: 1; min-width: 0; }
+input[type=password], input[type=text], select {
+  min-height: 44px; padding: 8px 12px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--paper); width: 100%;
+  font-size: 16px; /* 16px stops iOS from zooming in */
+}
+.seg { display: flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.seg button { flex: 1; min-height: 44px; border: 0; background: var(--paper); font-size: 14px; padding: 6px 4px; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button.on { background: var(--ai); color: var(--paper); font-weight: 600; }
+.size-row .btn { width: 56px; font-family: var(--mincho); }
+.size-val { min-width: 60px; text-align: center; font-size: 15px; }
+.field.check { display: flex; gap: 10px; align-items: center; }
+.field.check input { width: 22px; height: 22px; accent-color: var(--ai); }
+.field.check label { font-weight: 400; margin: 0; }
+
+.toast {
+  position: fixed; left: 50%; transform: translateX(-50%); z-index: 30;
+  bottom: calc(var(--safe-bottom) + 84px); max-width: calc(100% - 32px);
+  background: var(--ink); color: var(--paper); padding: 10px 16px; border-radius: 10px; font-size: 14px;
+}

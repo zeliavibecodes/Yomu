@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#FBFBF8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#15171C" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Yomu">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="style.css">
+<title>Yomu</title>
+</head>
+<body class="furi-unknown dir-vertical">
+
+<!-- Library -->
+<section id="library" class="screen">
+  <header class="lib-head">
+    <h1 class="lib-title">本棚</h1>
+    <div class="lib-actions">
+      <button id="editBtn" class="text-btn" hidden>Edit</button>
+      <button id="libSettingsBtn" class="text-btn">Settings</button>
+    </div>
+  </header>
+  <p id="keyNotice" class="notice" hidden>Add your jpdb key in Settings to see readings and save words.</p>
+  <div id="shelf" class="shelf"></div>
+  <div id="emptyShelf" class="empty" hidden>
+    <p class="empty-big">読</p>
+    <p>Add an EPUB from Files to start reading.</p>
+  </div>
+  <label class="add-book">
+    <input id="fileInput" type="file" accept=".epub,application/epub+zip">
+    <span>Add book</span>
+  </label>
+</section>
+
+<!-- Reader -->
+<section id="reader" class="screen" hidden>
+  <header id="readerBar" class="reader-bar">
+    <button id="backBtn" class="text-btn">Library</button>
+    <span id="readerTitle" class="reader-title"></span>
+    <div class="reader-bar-actions">
+      <button id="tocBtn" class="text-btn">Contents</button>
+      <button id="readerSettingsBtn" class="text-btn" aria-label="Reading settings">Aa</button>
+    </div>
+  </header>
+  <div id="page" class="page"><article id="text" class="text"></article></div>
+  <div id="status" class="status" hidden></div>
+</section>
+
+<!-- Word sheet -->
+<div id="scrim" class="scrim" hidden></div>
+<section id="wordSheet" class="sheet" hidden aria-label="Word details">
+  <div class="sheet-grip"></div>
+  <div class="word-head">
+    <ruby class="word-main"><span id="wSpelling"></span><rt id="wReading"></rt></ruby>
+    <span id="wState" class="word-state"></span>
+  </div>
+  <ol id="wMeanings" class="meanings"></ol>
+  <p id="wSentence" class="word-sentence"></p>
+  <div class="sheet-actions">
+    <button id="addBtn" class="btn primary">Add to deck</button>
+    <button id="knownBtn" class="btn">I know this</button>
+  </div>
+  <p id="wMsg" class="sheet-msg" role="status"></p>
+</section>
+
+<!-- Contents sheet -->
+<section id="tocSheet" class="sheet tall" hidden aria-label="Contents">
+  <div class="sheet-grip"></div>
+  <div class="sheet-head"><h2 class="sheet-title">Contents</h2><button class="text-btn close-sheet">Done</button></div>
+  <ul id="tocList" class="toc"></ul>
+</section>
+
+<!-- Settings sheet -->
+<section id="settingsSheet" class="sheet tall" hidden aria-label="Settings">
+  <div class="sheet-grip"></div>
+  <div class="sheet-head"><h2 class="sheet-title">Settings</h2><button class="text-btn close-sheet">Done</button></div>
+
+  <div class="field">
+    <label for="keyInput">jpdb API key</label>
+    <p class="hint">Find it at the bottom of your jpdb.io settings page. It stays on this phone.</p>
+    <div class="row">
+      <input id="keyInput" type="password" autocomplete="off" spellcheck="false" placeholder="Paste your key">
+      <button id="checkKeyBtn" class="btn">Check key</button>
+    </div>
+    <p id="keyMsg" class="hint" role="status"></p>
+  </div>
+
+  <div class="field">
+    <label for="deckSelect">Add new words to</label>
+    <select id="deckSelect" disabled><option>Check your key first</option></select>
+  </div>
+
+  <div class="field">
+    <span class="label">Show readings over</span>
+    <div class="seg" data-setting="furigana">
+      <button data-value="all">All words</button>
+      <button data-value="unknown">Words you don't know</button>
+      <button data-value="none">No words</button>
+    </div>
+  </div>
+
+  <div class="field">
+    <span class="label">Appearance</span>
+    <div class="seg" data-setting="theme">
+      <button data-value="auto">Match phone</button>
+      <button data-value="light">Light</button>
+      <button data-value="dark">Dark</button>
+    </div>
+  </div>
+
+  <div class="field">
+    <span class="label">Typeface</span>
+    <div class="seg" data-setting="font">
+      <button data-value="mincho" class="f-mincho">明朝 Mincho</button>
+      <button data-value="gothic" class="f-gothic">ゴシック Gothic</button>
+    </div>
+    <p class="hint">Mincho is the standard for novels. Gothic can be easier on dark backgrounds and small screens.</p>
+  </div>
+
+  <div class="field">
+    <span class="label">Text direction</span>
+    <div class="seg" data-setting="direction">
+      <button data-value="vertical">縦 Vertical</button>
+      <button data-value="horizontal">横 Horizontal</button>
+    </div>
+  </div>
+
+  <div class="field">
+    <span class="label">Text size</span>
+    <div class="row size-row">
+      <button id="sizeDown" class="btn" aria-label="Smaller text">小</button>
+      <span id="sizeVal" class="size-val"></span>
+      <button id="sizeUp" class="btn" aria-label="Larger text">大</button>
+    </div>
+  </div>
+
+  <div class="field check">
+    <input id="marksToggle" type="checkbox">
+    <label for="marksToggle">Underline words not in your decks</label>
+  </div>
+
+  <div class="field check">
+    <input id="sentenceToggle" type="checkbox">
+    <label for="sentenceToggle">Save the sentence with each new card</label>
+  </div>
+</section>
+
+<div id="toast" class="toast" hidden role="status"></div>
+
+<script src="vendor/jszip.min.js"></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>
