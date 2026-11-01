@@ -8,7 +8,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 /* =========================================================
    Settings (small values, kept in localStorage)
    ========================================================= */
-const DEFAULTS = { key: '', deck: '', furigana: 'unknown', direction: 'vertical', size: 19, sentence: true, theme: 'auto', font: 'mincho', underline: false, animate: true };
+const DEFAULTS = { key: '', deck: '', furigana: 'unknown', direction: 'vertical', size: 19, sentence: true, theme: 'auto', font: 'mincho', underline: false, animate: true, ghToken: '', gistId: '' };
 const settings = { ...DEFAULTS };
 if (matchMedia('(prefers-reduced-motion: reduce)').matches) settings.animate = false;
 try { Object.assign(settings, JSON.parse(localStorage.getItem('yomu.settings') || '{}')); } catch {}
@@ -481,8 +481,11 @@ async function openBook(id) {
   db.put('books', rec);
   $('readerTitle').textContent = rec.title;
   show('reader');
-  const prog = (await db.get('progress', id)) || { chapter: 0, block: 0 };
+  let prog = (await db.get('progress', id)) || { chapter: 0, block: 0 };
+  const remote = await newerRemote(rec, prog.at);
+  if (remote) prog = { chapter: remote.chapter, block: remote.block };
   await loadChapter(Math.min(prog.chapter, reader.epub.spine.length - 1), { block: prog.block || 0, page: prog.page ?? null, sig: prog.sig || '' });
+  if (remote) toast('Picked up where you left off on your other device.');
 }
 
 function closeBook() {
@@ -1133,11 +1136,102 @@ function saveProgress() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     if (!reader.book) return;
-    db.put('progress', { chapter: reader.chapter, block: currentBlock(), page: pager.page, sig: pager.sig }, reader.book.id);
+    db.put('progress', { chapter: reader.chapter, block: currentBlock(), page: pager.page, sig: pager.sig, at: Date.now() }, reader.book.id);
+    pushPosition();
     reader.book.chapter = reader.chapter;
     reader.book.percent = bookPercent();
     db.put('books', reader.book);
   }, 400);
+}
+
+
+/* =========================================================
+   Same place on every device
+   Reading positions (never books) are kept in a private GitHub Gist.
+   Each device writes its position a few seconds after you turn a page,
+   and checks for a newer one when you open a book or come back to the app.
+   ========================================================= */
+const deviceId = (() => {
+  try {
+    let d = localStorage.getItem('yomu.device');
+    if (!d) { d = Math.random().toString(36).slice(2, 10); localStorage.setItem('yomu.device', d); }
+    return d;
+  } catch { return 'unknown'; }
+})();
+const bookKey = (rec) => 'k' + hashText(`${rec.title}|${rec.author || ''}|${rec.chapters}`).replace(':', '_');
+const SYNC_FILE = 'yomu-sync.json';
+
+async function gh(method, path, body, opts = {}) {
+  const res = await fetch('https://api.github.com' + path, {
+    method,
+    headers: { Authorization: 'Bearer ' + settings.ghToken, Accept: 'application/vnd.github+json', ...(body ? { 'Content-Type': 'application/json' } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+    ...opts,
+  });
+  if (!res.ok) { const e = new Error(res.status === 401 ? 'GitHub did not accept this key.' : `GitHub returned an error (${res.status}).`); e.status = res.status; throw e; }
+  return res.status === 204 ? null : res.json();
+}
+async function connectSync() {
+  settings.ghToken = $('ghInput').value.trim();
+  settings.gistId = '';
+  saveSettings();
+  if (!settings.ghToken) return showSyncState('Paste your GitHub key first.');
+  showSyncState('Connecting…');
+  try {
+    const gists = await gh('GET', '/gists?per_page=100');
+    let g = gists.find((x) => x.files && x.files[SYNC_FILE]);
+    if (!g) g = await gh('POST', '/gists', { description: 'Yomu reading positions', public: false, files: { [SYNC_FILE]: { content: JSON.stringify({ books: {} }) } } });
+    settings.gistId = g.id;
+    saveSettings();
+    showSyncState();
+    if (reader.book) pushPosition(true);
+  } catch (e) {
+    showSyncState(e.message);
+  }
+}
+function showSyncState(msg) {
+  $('syncMsg').textContent = msg || (settings.gistId ? 'Connected. Your place in each book now follows you between devices.' : '');
+}
+async function readRemote() {
+  const g = await gh('GET', '/gists/' + settings.gistId);
+  try { return JSON.parse(g.files[SYNC_FILE]?.content || '{}'); } catch { return {}; }
+}
+let pushTimer;
+function pushPosition(now = false) {
+  if (!settings.gistId || !reader.book) return;
+  clearTimeout(pushTimer);
+  const rec = reader.book;
+  const entry = { title: rec.title, chapter: reader.chapter, block: currentBlock(), percent: bookPercent(), at: Date.now(), device: deviceId };
+  const send = async () => {
+    try {
+      const data = await readRemote();
+      data.books = data.books || {};
+      const old = data.books[bookKey(rec)];
+      if (old && old.at > entry.at) return;   // another device moved on since
+      data.books[bookKey(rec)] = entry;
+      await gh('PATCH', '/gists/' + settings.gistId, { files: { [SYNC_FILE]: { content: JSON.stringify(data) } } }, { keepalive: true });
+    } catch { /* offline: the next page turn will try again */ }
+  };
+  if (now) send(); else pushTimer = setTimeout(send, 8000);
+}
+// Returns a newer position saved by another device, if there is one.
+async function newerRemote(rec, localAt) {
+  if (!settings.gistId || !navigator.onLine) return null;
+  try {
+    const data = await Promise.race([readRemote(), sleep(3000).then(() => null)]);
+    const e = data?.books?.[bookKey(rec)];
+    if (e && e.device !== deviceId && e.at > (localAt || 0)) return e;
+  } catch {}
+  return null;
+}
+async function checkRemoteWhileReading() {
+  if (!reader.book || slide.busy) return;
+  const local = await db.get('progress', reader.book.id);
+  const e = await newerRemote(reader.book, local?.at);
+  if (!e || !reader.book) return;
+  if (e.chapter === reader.chapter && Math.abs(e.block - currentBlock()) < 2) return;
+  await loadChapter(Math.min(e.chapter, reader.epub.spine.length - 1), { block: e.block });
+  toast('Picked up where you left off on your other device.');
 }
 
 /* =========================================================
@@ -1391,7 +1485,13 @@ function init() {
   $('readerSettingsBtn').addEventListener('click', () => openSheet('settingsSheet'));
   $('offlineBtn').addEventListener('click', () => saveWholeBook());
   window.addEventListener('online', flushPending);
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') flushPending(); });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') { flushPending(); checkRemoteWhileReading(); }
+    else pushPosition(true);   // leaving the app: save your place right away
+  });
+  $('ghConnectBtn').addEventListener('click', connectSync);
+  $('ghInput').value = settings.ghToken;
+  showSyncState();
   setTimeout(flushPending, 1500);
   $('libSettingsBtn').addEventListener('click', () => openSheet('settingsSheet'));
   $('scrim').addEventListener('click', closeSheet);

@@ -114,6 +114,16 @@
   </div>
 
   <div class="field settings-group">
+    <label for="ghInput">Sync between devices</label>
+    <p class="hint">Keeps your place in each book the same on your phone and other devices, using a private note on your GitHub account. <a href="https://github.com/settings/tokens/new?scopes=gist&amp;description=Yomu%20sync" target="_blank" rel="noopener">Create a key on GitHub</a>: keep only “gist” ticked, set expiration to “No expiration”, then copy the key here.</p>
+    <div class="row">
+      <input id="ghInput" type="password" autocomplete="off" spellcheck="false" placeholder="Paste your GitHub key">
+      <button id="ghConnectBtn" class="btn">Connect</button>
+    </div>
+    <p id="syncMsg" class="hint" role="status"></p>
+  </div>
+
+  <div class="field settings-group">
     <span class="label">Show readings over</span>
     <div class="seg" data-setting="furigana">
       <button data-value="all">All words</button>

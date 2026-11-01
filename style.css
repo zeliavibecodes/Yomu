@@ -339,6 +339,7 @@ svg.i { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-widt
 .field { margin-bottom: 26px; }
 .field > label, .field .label { display: block; font-weight: 600; font-size: 13px; color: var(--muted); margin: 0 0 8px 2px; }
 .hint { color: var(--muted); font-size: 13px; line-height: 1.45; margin: 8px 2px 0; }
+.hint a { color: var(--ink); text-underline-offset: 2px; }
 .field > .hint:first-of-type { margin: -2px 2px 10px; }
 .row { display: flex; gap: 8px; align-items: center; }
 .row input { flex: 1; min-width: 0; }
