@@ -99,9 +99,8 @@ svg.i { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-widt
   font-family: var(--ui); font-weight: 700; font-size: 34px; line-height: 1.1;
   letter-spacing: -0.025em; margin: 18px 0 4px;
 }
-.lib-subrow { display: flex; align-items: center; justify-content: space-between; margin: 0 -6px 18px 0; min-height: 44px; }
+.lib-subrow { display: flex; align-items: center; justify-content: space-between; margin: -10px -6px 18px 0; min-height: 44px; }
 .lib-sub { margin: 0; color: var(--muted); font-size: 15px; }
-.lib-sub .jp { font-family: var(--mincho); color: var(--faint); margin-left: 6px; }
 .notice {
   margin: 0 0 24px; padding: 14px 16px; border-radius: 14px;
   background: var(--fill); color: var(--ink-2); font-size: 14px; line-height: 1.45;
@@ -145,7 +144,7 @@ svg.i { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-widt
   box-shadow: 0 2px 8px rgba(0,0,0,0.2);
 }
 .empty { text-align: center; color: var(--muted); padding: 72px 20px; font-size: 15px; }
-.empty-big { font-family: var(--mincho); font-size: 64px; color: var(--fill-strong); margin: 0 0 14px; line-height: 1; }
+.empty-big { font-family: var(--gothic); font-weight: 300; font-size: 64px; color: var(--fill-strong); margin: 0 0 14px; line-height: 1; }
 .add-book {
   position: fixed; left: 50%; transform: translateX(-50%);
   bottom: calc(var(--safe-bottom) + 22px);
@@ -160,7 +159,7 @@ svg.i { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-widt
 .add-book:focus-within { outline: 2px solid var(--ink); outline-offset: 3px; }
 
 /* ---------- Library / Discover switch ---------- */
-.lib-tabs { display: flex; align-items: baseline; gap: 18px; margin: 18px 0 4px; }
+.lib-tabs { display: flex; align-items: baseline; gap: 18px; margin: 18px 0 14px; }
 .lib-tabs button {
   background: none; border: 0; padding: 0; font-family: var(--ui); letter-spacing: -0.025em;
   font-size: 22px; font-weight: 600; color: var(--faint); line-height: 1.1;

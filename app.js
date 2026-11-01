@@ -1446,7 +1446,8 @@ async function renderShelf() {
   coverUrls.splice(0).forEach((u) => URL.revokeObjectURL(u));
   const books = (await db.all('books')).sort((a, b) => (b.lastOpened || b.added) - (a.lastOpened || a.added));
   $('emptyShelf').hidden = books.length > 0;
-  $('libSub').innerHTML = books.length ? `${books.length} ${books.length === 1 ? 'book' : 'books'}<span class="jp">本棚</span>` : '<span class="jp">本棚</span>';
+  $('libSub').textContent = books.length ? `${books.length} ${books.length === 1 ? 'book' : 'books'}` : '';
+  $('libSub').parentElement.hidden = !books.length;
   $('editBtn').hidden = books.length === 0 || !$('discoverView').hidden;
   if (!books.length) editing = false;
   $('editBtn').textContent = editing ? 'Done' : 'Edit';
