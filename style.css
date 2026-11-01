@@ -184,7 +184,7 @@ svg.i { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-widt
 .safe-probe.bottom { bottom: 0; height: env(safe-area-inset-bottom, 0px); }
 .page-num {
   position: absolute; left: 0; right: 0; bottom: calc(var(--safe-bottom) + 14px);
-  text-align: center; font-size: 11px; letter-spacing: 0.04em; color: var(--faint); pointer-events: none; z-index: 3;
+  text-align: center; font-size: 11px; letter-spacing: 0.04em; color: var(--faint); pointer-events: none; z-index: 3; white-space: pre;
   font-variant-numeric: tabular-nums;
 }
 
@@ -321,6 +321,10 @@ svg.i { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-widt
 .btn:disabled { opacity: 0.4; }
 
 /* Contents */
+.offline-row { display: flex; gap: 14px; align-items: center; justify-content: space-between; background: var(--fill); border-radius: 14px; padding: 14px 14px 14px 16px; margin-bottom: 14px; }
+.offline-title { font-weight: 600; font-size: 15px; }
+.offline-row .hint { margin: 2px 0 0; }
+.offline-row .btn { flex: none; min-height: 40px; padding: 8px 14px; background: var(--ink); color: var(--paper); border-radius: 999px; font-size: 14px; }
 .toc { list-style: none; margin: 0; padding: 0; }
 .toc button {
   width: 100%; text-align: left; background: none; border: 0;

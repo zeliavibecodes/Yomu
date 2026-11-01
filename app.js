@@ -167,6 +167,19 @@ async function coverBlob(epub) {
   const f = epub.file(epub.coverHref);
   return f ? new Blob([await f.async('uint8array')], { type: guessType(epub.coverHref) }) : null;
 }
+// How many characters of text each chapter has, so progress can be shown
+// for the whole book rather than just the current chapter.
+async function chapterLengths(epub) {
+  const out = [];
+  for (const href of epub.spine) {
+    const f = epub.file(href);
+    const t = f ? await f.async('string') : '';
+    const body = t.replace(/^[\s\S]*?<body[^>]*>/i, '').replace(/<(rt|rp)[^>]*>[\s\S]*?<\/\1>/gi, '')
+      .replace(/<[^>]+>/g, '').replace(/&[a-z#0-9]+;/gi, 'x').replace(/\s+/g, '');
+    out.push(body.length);
+  }
+  return out;
+}
 function guessType(p) {
   const ext = p.split('.').pop().toLowerCase();
   return { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', svg: 'image/svg+xml', webp: 'image/webp' }[ext] || 'application/octet-stream';
@@ -463,6 +476,7 @@ async function openBook(id) {
     return toast('This book could not be opened.');
   }
   reader.book = rec;
+  if (!rec.lengths || rec.lengths.length !== reader.epub.spine.length) rec.lengths = await chapterLengths(reader.epub);
   rec.lastOpened = Date.now();
   db.put('books', rec);
   $('readerTitle').textContent = rec.title;
@@ -522,11 +536,124 @@ function saveCacheSoon() {
   const key = cache.key, data = cache.data;
   cache.timer = setTimeout(() => { db.put('parsed', data, key).catch(() => {}); cache.dirty = false; }, 1200);
 }
+function storeTokens(record, b, text, tokens) {
+  record.blocks[b] = { h: hashText(text), t: tokens.map((t) => [t.key, t.start, t.end, t.rubies.map((r) => [r.start, r.end, r.text])]) };
+  for (const t of tokens) { const v = vocab.get(t.key); if (v) record.vocab[t.key] = v; }
+}
 function rememberTokens(b, text, tokens) {
   if (!cache.data) return;
-  cache.data.blocks[b] = { h: hashText(text), t: tokens.map((t) => [t.key, t.start, t.end, t.rubies.map((r) => [r.start, r.end, r.text])]) };
-  for (const t of tokens) { const v = vocab.get(t.key); if (v) cache.data.vocab[t.key] = v; }
+  storeTokens(cache.data, b, text, tokens);
   saveCacheSoon();
+}
+
+/* =========================================================
+   Save a whole book for offline reading
+   Goes through every chapter and asks jpdb for any paragraphs not saved
+   yet. Takes a minute or two for a novel; you can keep reading meanwhile.
+   ========================================================= */
+const saving = { bookId: null, chapter: 0 };
+
+async function saveWholeBook() {
+  const book = reader.book;
+  if (!book || saving.bookId) return;
+  if (!settings.key) return toast('Add your jpdb key in Settings first.');
+  saving.bookId = book.id;
+  const n = reader.epub.spine.length;
+  try {
+    for (let i = 0; i < n; i++) {
+      if (reader.book?.id !== book.id) return;   // book was closed: carry on next time
+      saving.chapter = i;
+      showOfflineState();
+      const key = book.id + '/' + i;
+      const isOpen = () => cache.key === key;
+      const record = isOpen() ? cache.data : (await db.get('parsed', key)) || { blocks: {}, vocab: {} };
+      const { blocks } = await buildChapter(i, { images: false });
+      const missing = [];
+      for (const el of blocks) {
+        const text = extract(el).text;
+        const e = record.blocks[el.dataset.b];
+        if (!e || e.h !== hashText(text)) missing.push({ b: el.dataset.b, text });
+      }
+      while (missing.length) {
+        const batch = [];
+        let chars = 0;
+        while (missing.length && batch.length < 40 && (!batch.length || chars + missing[0].text.length <= 2500)) {
+          const m = missing.shift(); batch.push(m); chars += m.text.length;
+        }
+        let tokens;
+        for (let tries = 0; ; tries++) {
+          try { tokens = await parseTexts(batch.map((m) => m.text)); break; }
+          catch (e) {
+            if ((e.code === 'too_many_requests' || e.code === 'api_unavailable') && tries < 5) { await sleep(2000 * (tries + 1)); continue; }
+            throw e;
+          }
+        }
+        batch.forEach((m, j) => storeTokens(record, m.b, m.text, tokens[j]));
+        await sleep(250);
+      }
+      if (isOpen()) saveCacheSoon(); else await db.put('parsed', record, key);
+    }
+    book.offline = true;
+    await db.put('books', book);
+    toast('The whole book is saved for offline reading.');
+  } catch (e) {
+    toast(e.code === 'offline' ? "You're offline. Saving will continue next time." : 'Saving stopped: ' + e.message);
+  } finally {
+    saving.bookId = null;
+    showOfflineState();
+  }
+}
+function showOfflineState() {
+  const book = reader.book;
+  if (!book) return;
+  const btn = $('offlineBtn'), msg = $('offlineMsg');
+  if (saving.bookId === book.id) {
+    btn.hidden = true;
+    msg.textContent = `Saving chapter ${saving.chapter + 1} of ${reader.epub.spine.length}…`;
+  } else if (book.offline) {
+    btn.hidden = true;
+    msg.textContent = 'Readings and meanings for the whole book are saved on this phone.';
+  } else {
+    btn.hidden = false;
+    msg.textContent = 'Chapters you open are saved automatically. Save the whole book to read anywhere without internet.';
+  }
+}
+
+/* =========================================================
+   Words added while offline
+   They wait on the phone and go to jpdb as soon as you're back online.
+   ========================================================= */
+function pendingList() { try { return JSON.parse(localStorage.getItem('yomu.pending') || '[]'); } catch { return []; } }
+function setPending(list) { try { localStorage.setItem('yomu.pending', JSON.stringify(list)); } catch {} }
+function queueWord(item) { const l = pendingList(); l.push({ ...item, at: Date.now() }); setPending(l); }
+
+let flushing = false;
+async function flushPending() {
+  if (flushing || !settings.key || !navigator.onLine) return;
+  let list = pendingList();
+  if (!list.length) return;
+  flushing = true;
+  let sent = 0;
+  try {
+    while (list.length) {
+      const it = list[0];
+      let { vid, sid } = it;
+      if (!vid) {
+        // Looked up with the offline dictionary: find the word in jpdb by its sentence.
+        const [toks] = await parseTexts([it.sentence]);
+        const hit = toks.find((t) => t.start <= it.offset && t.end > it.offset) || toks.find((t) => vocab.get(t.key)?.spelling === it.spelling);
+        if (!hit) { list.shift(); setPending(list); continue; }
+        ({ vid, sid } = vocab.get(hit.key));
+      }
+      await jpdb('deck/add-vocabulary', { id: it.deck, vocabulary: [[vid, sid]] });
+      if (it.sentence && it.deck !== 'never-forget' && it.sentence.length <= 300) {
+        try { await jpdb('set-card-sentence', { vid, sid, sentence: it.sentence }); } catch {}
+      }
+      list.shift(); setPending(list); sent++;
+    }
+  } catch { /* still offline or jpdb unavailable: try again later */ }
+  flushing = false;
+  if (sent) toast(`Added ${sent} word${sent > 1 ? 's' : ''} you saved while offline.`);
 }
 function cachedTokens(b, text) {
   const e = cache.data?.blocks[b];
@@ -603,8 +730,50 @@ function goToPage(n, { save = true } = {}) {
   const el = $('page');
   if (pager.vertical) { el.scrollTop = pager.page * pager.h; el.scrollLeft = 0; }
   else { el.scrollLeft = pager.page * pager.w; el.scrollTop = 0; }
-  $('pageNum').textContent = `${pager.page + 1} / ${pager.count}`;
+  showProgress();
+  notePageTime();
   if (save) saveProgress();
+}
+
+/* =========================================================
+   Progress through the book
+   Percent of the whole book, and minutes left in the chapter based on
+   how fast you actually read (it adjusts as you turn pages).
+   ========================================================= */
+const speed = { cpm: 150, shownAt: 0, page: -1, chapter: -1 };
+try { speed.cpm = +localStorage.getItem('yomu.cpm') || 150; } catch {}
+
+function bookPercent() {
+  const L = reader.book?.lengths;
+  if (!L) return 0;
+  const total = L.reduce((a, b) => a + b, 0) || 1;
+  const before = L.slice(0, reader.chapter).reduce((a, b) => a + b, 0);
+  const within = (L[reader.chapter] || 0) * (pager.page / Math.max(1, pager.count));
+  return Math.min(100, Math.floor(((before + within) / total) * 100));
+}
+function showProgress() {
+  const L = reader.book?.lengths;
+  const len = L ? L[reader.chapter] || 0 : 0;
+  const left = len * (1 - (pager.page + 1) / Math.max(1, pager.count));
+  const mins = Math.ceil(left / speed.cpm);
+  const time = pager.page >= pager.count - 1 ? 'Last page of the chapter' : mins <= 1 ? 'About a minute left in the chapter' : `${mins} min left in the chapter`;
+  $('pageNum').textContent = L ? `${bookPercent()}%  ·  ${time}` : `${pager.page + 1} / ${pager.count}`;
+}
+// Learn reading speed from how long you spend on each page you move past.
+function notePageTime() {
+  const now = Date.now();
+  if (speed.chapter === reader.chapter && pager.page === speed.page + 1 && reader.book?.lengths) {
+    const secs = (now - speed.shownAt) / 1000;
+    if (secs > 6 && secs < 300) {
+      const perPage = (reader.book.lengths[reader.chapter] || 0) / Math.max(1, pager.count);
+      const sample = perPage / (secs / 60);
+      if (sample > 20 && sample < 2000) {
+        speed.cpm = Math.round(speed.cpm * 0.85 + sample * 0.15);
+        try { localStorage.setItem('yomu.cpm', speed.cpm); } catch {}
+      }
+    }
+  }
+  speed.shownAt = now; speed.page = pager.page; speed.chapter = reader.chapter;
 }
 function pageOf(node) {
   if (!node) return 0;
@@ -776,16 +945,13 @@ function relayoutKeeping(block) {
   });
 }
 
-async function loadChapter(index, { block = 0, frag = '', page: pageArg = null, sig = '' } = {}) {
-  reader.stopped = true;
-  reader.observer?.disconnect();
-  reader.queue = [];
-  reader.chapter = index;
+// Turn one chapter of the EPUB into page content, and find its paragraphs.
+// Used both for reading and, without images, for saving a book offline.
+async function buildChapter(index, { images = true } = {}) {
   const href = reader.epub.spine[index];
   const doc = parseXml(await reader.epub.file(href).async('string'));
   const body = doc.body || byLocal(doc, 'body')[0];
-  const root = $('text');
-  root.innerHTML = '';
+  const root = document.createElement('div');
 
   // Bring the chapter in, dropping anything that could run code or restyle the page.
   const frag2 = document.createDocumentFragment();
@@ -799,12 +965,16 @@ async function loadChapter(index, { block = 0, frag = '', page: pageArg = null, 
   }
   applyBookRules(frag2, await bookRulesFor(doc, href));
   for (const el of frag2.querySelectorAll('[class]')) el.removeAttribute('class');
-  for (const img of frag2.querySelectorAll('img')) img.setAttribute('src', await imageUrl(resolvePath(href, img.getAttribute('src') || '')));
-  for (const im of frag2.querySelectorAll('image')) {
-    const h = im.getAttribute('href') || im.getAttributeNS('http://www.w3.org/1999/xlink', 'href') || '';
-    const u = await imageUrl(resolvePath(href, h));
-    im.setAttribute('href', u);
-    im.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', u);
+  if (images) {
+    for (const img of frag2.querySelectorAll('img')) img.setAttribute('src', await imageUrl(resolvePath(href, img.getAttribute('src') || '')));
+    for (const im of frag2.querySelectorAll('image')) {
+      const h = im.getAttribute('href') || im.getAttributeNS('http://www.w3.org/1999/xlink', 'href') || '';
+      const u = await imageUrl(resolvePath(href, h));
+      im.setAttribute('href', u);
+      im.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', u);
+    }
+  } else {
+    frag2.querySelectorAll('img').forEach((i) => i.removeAttribute('src'));
   }
   for (const a of frag2.querySelectorAll('a[href]')) {
     const h = a.getAttribute('href');
@@ -821,13 +991,25 @@ async function loadChapter(index, { block = 0, frag = '', page: pageArg = null, 
   root.appendChild(end);
 
   // Find the paragraphs worth sending to jpdb.
-  reader.blocks = Array.from(root.querySelectorAll('*')).filter((el) => {
+  const blocks = Array.from(root.querySelectorAll('*')).filter((el) => {
     if (!BLOCKS.has(el.localName) || el.closest('.chapter-end')) return false;
     for (const c of el.querySelectorAll('*')) if (BLOCKS.has(c.localName) || c.localName === 'img' || c.localName === 'svg') return false;
     return JP.test(el.textContent);
   });
-  reader.blocks.forEach((el, i) => (el.dataset.b = i));
-  reader.blocks.forEach(addTateChuYoko);
+  blocks.forEach((el, i) => (el.dataset.b = i));
+  blocks.forEach(addTateChuYoko);
+  return { root, blocks };
+}
+
+async function loadChapter(index, { block = 0, frag = '', page: pageArg = null, sig = '' } = {}) {
+  reader.stopped = true;
+  reader.observer?.disconnect();
+  reader.queue = [];
+  reader.chapter = index;
+  const { root: built, blocks } = await buildChapter(index, { images: true });
+  const root = $('text');
+  root.replaceChildren(...built.childNodes);
+  reader.blocks = blocks;
 
   // Readings saved from an earlier visit go in before the page is laid out.
   await openCache(reader.book.id, index);
@@ -914,7 +1096,7 @@ async function pump() {
         b.el.dataset.parsed = 'yes';
       });
       countPages();
-      $('pageNum').textContent = `${pager.page + 1} / ${pager.count}`;
+      showProgress();
       markGhostDirty();
       errors = 0;
     } catch (e) {
@@ -953,6 +1135,7 @@ function saveProgress() {
     if (!reader.book) return;
     db.put('progress', { chapter: reader.chapter, block: currentBlock(), page: pager.page, sig: pager.sig }, reader.book.id);
     reader.book.chapter = reader.chapter;
+    reader.book.percent = bookPercent();
     db.put('books', reader.book);
   }, 400);
 }
@@ -1021,6 +1204,13 @@ async function addCurrent(deckId, newState, doneMsg) {
   if (!settings.key) return ($('wMsg').textContent = 'Add your jpdb key in Settings first.');
   if (deckId === null) return ($('wMsg').textContent = 'Choose a deck in Settings first.');
   const { v, sentence } = current;
+  const queueIt = () => {
+    queueWord({ vid: v.vid || null, sid: v.sid || null, deck: deckId, sentence: settings.sentence || !v.vid ? sentence.full : '', spelling: v.spelling, offset: sentence.before.length });
+    v.state = newState;
+    updateWordEverywhere(v);
+    $('wMsg').textContent = "You're offline. It will go to your deck when you're back online.";
+  };
+  if (!v.vid || !navigator.onLine) return queueIt();
   $('addBtn').disabled = $('knownBtn').disabled = true;
   $('wMsg').textContent = 'Saving…';
   try {
@@ -1032,7 +1222,8 @@ async function addCurrent(deckId, newState, doneMsg) {
     updateWordEverywhere(v);
     $('wMsg').textContent = doneMsg;
   } catch (e) {
-    $('wMsg').textContent = e.code === 'bad_deck' ? 'That deck no longer exists. Pick another in Settings.' : e.message;
+    if (e.code === 'offline') queueIt();
+    else $('wMsg').textContent = e.code === 'bad_deck' ? 'That deck no longer exists. Pick another in Settings.' : e.message;
   } finally {
     $('addBtn').disabled = $('knownBtn').disabled = false;
   }
@@ -1098,8 +1289,8 @@ async function renderShelf() {
       coverUrls.push(u);
       cover = `<div class="book-cover"><img src="${u}" alt=""></div>`;
     } else cover = `<div class="book-cover"><div class="book-spine">${esc(b.title)}${b.author ? `<span class="sa">${esc(b.author)}</span>` : ''}</div></div>`;
-    const prog = !b.lastOpened ? 'Not started' : b.chapters > 1 ? `Chapter ${(b.chapter || 0) + 1} of ${b.chapters}` : 'Started';
-    const pct = b.lastOpened && b.chapters ? Math.round(((b.chapter || 0) + 1) / b.chapters * 100) : 0;
+    const pct = b.lastOpened ? Math.max(1, b.percent ?? Math.round(((b.chapter || 0) + 1) / (b.chapters || 1) * 100)) : 0;
+    const prog = !b.lastOpened ? 'Not started' : pct >= 100 ? 'Finished' : `${pct}% read`;
     el.innerHTML = `<button class="book" data-open="${b.id}" aria-label="Open ${esc(b.title)}">${cover}
       <div class="book-meta"><div class="t">${esc(b.title)}</div><div class="p">${b.lastOpened ? prog : esc(b.author || 'Not started')}</div>${pct ? `<div class="book-bar"><span style="width:${pct}%"></span></div>` : ''}</div></button>
       ${editing ? `<button class="book-remove" data-remove="${b.id}" aria-label="Remove ${esc(b.title)}">✕</button>` : ''}`;
@@ -1116,7 +1307,7 @@ async function addBookFile(file) {
     if (!epub.spine.length) throw new Error('empty');
     const id = 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
     await db.put('files', buf, id);
-    await db.put('books', { id, title: epub.title, author: epub.author, cover: await coverBlob(epub), chapters: epub.spine.length, chapter: 0, added: Date.now() });
+    await db.put('books', { id, title: epub.title, author: epub.author, cover: await coverBlob(epub), chapters: epub.spine.length, lengths: await chapterLengths(epub), chapter: 0, percent: 0, added: Date.now() });
     toast(`Added ${epub.title}`);
     renderShelf();
   } catch (e) {
@@ -1194,9 +1385,14 @@ function init() {
       closeSheet();
       loadChapter(spine.indexOf(t.href), { frag: t.frag });
     };
+    showOfflineState();
     openSheet('tocSheet');
   });
   $('readerSettingsBtn').addEventListener('click', () => openSheet('settingsSheet'));
+  $('offlineBtn').addEventListener('click', () => saveWholeBook());
+  window.addEventListener('online', flushPending);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') flushPending(); });
+  setTimeout(flushPending, 1500);
   $('libSettingsBtn').addEventListener('click', () => openSheet('settingsSheet'));
   $('scrim').addEventListener('click', closeSheet);
   document.querySelectorAll('.close-sheet').forEach((b) => b.addEventListener('click', closeSheet));
