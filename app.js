@@ -44,11 +44,13 @@ const db = {
   _p: null,
   open() {
     if (!this._p) this._p = new Promise((res, rej) => {
-      const r = indexedDB.open('yomu', 1);
+      const r = indexedDB.open('yomu', 2);
       r.onupgradeneeded = () => {
-        r.result.createObjectStore('books', { keyPath: 'id' });
-        r.result.createObjectStore('files');
-        r.result.createObjectStore('progress');
+        const d = r.result, has = (n) => d.objectStoreNames.contains(n);
+        if (!has('books')) d.createObjectStore('books', { keyPath: 'id' });
+        if (!has('files')) d.createObjectStore('files');
+        if (!has('progress')) d.createObjectStore('progress');
+        if (!has('parsed')) d.createObjectStore('parsed');   // jpdb results, one record per chapter
       };
       r.onsuccess = () => res(r.result);
       r.onerror = () => rej(r.error);
@@ -68,6 +70,7 @@ const db = {
   all: (s) => db.tx(s, 'readonly', (o) => o.getAll()),
   put: (s, v, k) => db.tx(s, 'readwrite', (o) => o.put(v, k)),
   del: (s, k) => db.tx(s, 'readwrite', (o) => o.delete(k)),
+  delPrefix: (s, prefix) => db.tx(s, 'readwrite', (o) => o.delete(IDBKeyRange.bound(prefix, prefix + '\uffff'))),
 };
 
 /* =========================================================
@@ -490,6 +493,71 @@ async function imageUrl(path) {
 }
 
 /* =========================================================
+   Saved jpdb results
+   Each chapter's readings and meanings are kept on the phone, so a
+   chapter you've opened before shows its readings straight away, with
+   no waiting, no internet, and no text moving as readings arrive.
+   Whether you know a word can change on jpdb, so that part is
+   refreshed in the background whenever you're online.
+   ========================================================= */
+const cache = { key: '', data: null, timer: null };
+
+function hashText(t) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+  return (h >>> 0).toString(36) + ':' + t.length;
+}
+async function openCache(bookId, chapter) {
+  clearTimeout(cache.timer);
+  if (cache.key && cache.data && cache.dirty) await db.put('parsed', cache.data, cache.key);
+  cache.key = bookId + '/' + chapter;
+  cache.data = (await db.get('parsed', cache.key)) || { blocks: {}, vocab: {} };
+  cache.dirty = false;
+  for (const [k, v] of Object.entries(cache.data.vocab)) if (!vocab.has(k)) vocab.set(k, v);
+  return cache.data;
+}
+function saveCacheSoon() {
+  cache.dirty = true;
+  clearTimeout(cache.timer);
+  const key = cache.key, data = cache.data;
+  cache.timer = setTimeout(() => { db.put('parsed', data, key).catch(() => {}); cache.dirty = false; }, 1200);
+}
+function rememberTokens(b, text, tokens) {
+  if (!cache.data) return;
+  cache.data.blocks[b] = { h: hashText(text), t: tokens.map((t) => [t.key, t.start, t.end, t.rubies.map((r) => [r.start, r.end, r.text])]) };
+  for (const t of tokens) { const v = vocab.get(t.key); if (v) cache.data.vocab[t.key] = v; }
+  saveCacheSoon();
+}
+function cachedTokens(b, text) {
+  const e = cache.data?.blocks[b];
+  if (!e || e.h !== hashText(text)) return null;
+  return e.t.map(([key, start, end, rs]) => ({ key, start, end, rubies: rs.map(([s, en, tx]) => ({ start: s, end: en, text: tx })) }));
+}
+// Ask jpdb which of this chapter's words you now know, and update them.
+async function refreshWordStates(chapterAtStart) {
+  if (!settings.key || !cache.data) return;
+  const list = Object.values(cache.data.vocab);
+  for (let i = 0; i < list.length; i += 200) {
+    const part = list.slice(i, i + 200);
+    let res;
+    try { res = await jpdb('lookup-vocabulary', { list: part.map((v) => [v.vid, v.sid]), fields: ['card_state'] }); }
+    catch { return; }
+    if (reader.chapter !== chapterAtStart) return;
+    res.vocabulary_info.forEach((info, j) => {
+      if (!info) return;
+      const v = vocab.get(part[j].key) || part[j];
+      const state = info[0] || null;
+      if (JSON.stringify(state) !== JSON.stringify(v.state)) {
+        v.state = state;
+        cache.data.vocab[v.key] = v;
+        updateWordEverywhere(v);
+        saveCacheSoon();
+      }
+    });
+  }
+}
+
+/* =========================================================
    Pages
    The chapter is laid out in page-sized columns, one per screen.
    Vertical books stack their pages downward; horizontal books
@@ -761,6 +829,14 @@ async function loadChapter(index, { block = 0, frag = '', page: pageArg = null, 
   reader.blocks.forEach((el, i) => (el.dataset.b = i));
   reader.blocks.forEach(addTateChuYoko);
 
+  // Readings saved from an earlier visit go in before the page is laid out.
+  await openCache(reader.book.id, index);
+  for (const el of reader.blocks) {
+    const ex = extract(el);
+    const tokens = cachedTokens(el.dataset.b, ex.text);
+    if (tokens) { wrapTokens(ex, tokens); el.dataset.parsed = 'yes'; }
+  }
+
   // Lay out pages and go to the right one.
   const page = $('page');
   layoutPages();
@@ -775,7 +851,7 @@ async function loadChapter(index, { block = 0, frag = '', page: pageArg = null, 
   reader.stopped = false;
   reader.observer = new IntersectionObserver((entries) => {
     for (const e of entries) {
-      if (e.isIntersecting && !e.target.dataset.parsed) {
+      if (e.isIntersecting && (!e.target.dataset.parsed || e.target.dataset.parsed === 'prefetch')) {
         e.target.dataset.parsed = 'queued';
         reader.queue.push(e.target);
         reader.observer.unobserve(e.target);
@@ -783,7 +859,9 @@ async function loadChapter(index, { block = 0, frag = '', page: pageArg = null, 
     }
     pump();
   }, { root: page, rootMargin: '150%' });
-  if (settings.key) reader.blocks.forEach((b) => reader.observer.observe(b));
+  if (settings.key) reader.blocks.forEach((b) => { if (!b.dataset.parsed) reader.observer.observe(b); });
+  if (reader.blocks.every((b) => b.dataset.parsed)) pump();   // nothing to fetch on screen: go straight to saving the rest
+  refreshWordStates(index);
   markGhostDirty();
   saveProgress();
 }
@@ -793,7 +871,7 @@ async function pump() {
   reader.running = true;
   const chapterAtStart = reader.chapter;
   let errors = 0;
-  while (reader.queue.length && !reader.stopped && reader.chapter === chapterAtStart) {
+  while (!reader.stopped && reader.chapter === chapterAtStart) {
     // Take paragraphs in reading order, up to about 2,500 characters at a time.
     // Current page first, then the pages after it, then earlier ones.
     const cur = currentBlock();
@@ -804,16 +882,34 @@ async function pump() {
     while (reader.queue.length && batch.length < 40) {
       const el = reader.queue[0];
       const ex = extract(el);
+      // Already saved from the background pass: show it without asking jpdb again.
+      const saved = cachedTokens(el.dataset.b, ex.text);
+      if (saved) { reader.queue.shift(); wrapTokens(ex, saved); el.dataset.parsed = 'yes'; markGhostDirty(); continue; }
       if (batch.length && chars + ex.text.length > 2500) break;
       reader.queue.shift();
       batch.push({ el, ...ex });
       chars += ex.text.length;
     }
-    setStatus(`Adding readings…`);
+    // Nothing near the screen left: quietly fetch the rest of the chapter so it's saved.
+    if (!batch.length && !reader.queue.length) {
+      const rest = reader.blocks.filter((el) => !el.dataset.parsed && !cache.data?.blocks[el.dataset.b]);
+      chars = 0;
+      for (const el of rest) {
+        const ex = extract(el);
+        if (batch.length && (chars + ex.text.length > 2500 || batch.length >= 40)) break;
+        el.dataset.parsed = 'prefetch';
+        batch.push({ el, ...ex, prefetch: true });
+        chars += ex.text.length;
+      }
+      if (!batch.length) break;
+    }
+    if (!batch.some((b) => b.prefetch)) setStatus('Adding readings…');
     try {
       const tokens = await parseTexts(batch.map((b) => b.text));
       if (reader.stopped || reader.chapter !== chapterAtStart) break;
       batch.forEach((b, i) => {
+        rememberTokens(b.el.dataset.b, b.text, tokens[i]);
+        if (b.prefetch) { delete b.el.dataset.parsed; return; }   // saved for later, page left as it is
         wrapTokens(b, tokens[i]);
         b.el.dataset.parsed = 'yes';
       });
@@ -823,8 +919,10 @@ async function pump() {
       errors = 0;
     } catch (e) {
       batch.forEach((b) => delete b.el.dataset.parsed);
+      if (batch.every((b) => b.prefetch)) { if (e.code === 'offline' || e.code === 'bad_key') break; await sleep(2000); continue; }
+      const onScreen = batch.filter((b) => !b.prefetch);
       if (e.code === 'too_many_requests' || e.code === 'api_unavailable') {
-        reader.queue.unshift(...batch.map((b) => b.el));
+        reader.queue.unshift(...onScreen.map((b) => b.el));
         await sleep(2000);
       } else if (e.code === 'bad_key') {
         toast('jpdb did not accept your key. Check it in Settings.');
@@ -833,7 +931,7 @@ async function pump() {
         errors++;
         toast(e.message);
         if (errors >= 3) { reader.queue = []; break; }
-        reader.queue.unshift(...batch.map((b) => b.el));
+        reader.queue.unshift(...onScreen.map((b) => b.el));
         await sleep(3000);
       }
     }
@@ -903,6 +1001,13 @@ function openWord(el) {
 
 function updateWordEverywhere(v) {
   markGhostDirty();
+  if (current?.v !== v) {
+    document.querySelectorAll(`.w[data-k="${CSS.escape(v.key)}"]`).forEach((el) => {
+      el.classList.remove('st-none', 'st-learning', 'st-known');
+      el.classList.add(stateClass(v.state));
+    });
+    return;
+  }
   document.querySelectorAll(`.w[data-k="${CSS.escape(v.key)}"]`).forEach((el) => {
     el.classList.remove('st-none', 'st-learning', 'st-known');
     el.classList.add(stateClass(v.state));
@@ -1067,7 +1172,7 @@ function init() {
       const id = rm.dataset.remove;
       const b = await db.get('books', id);
       if (confirm(`Remove "${b?.title}" from this phone?`)) {
-        await db.del('books', id); await db.del('files', id); await db.del('progress', id);
+        await db.del('books', id); await db.del('files', id); await db.del('progress', id); await db.delPrefix('parsed', id + '/');
         renderShelf();
       }
       return;
