@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="Yomu">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="stylesheet" href="style.css?v=11011828">
+<link rel="stylesheet" href="style.css?v=11011832">
 <title>Yomu</title>
 </head>
 <body class="furi-unknown dir-vertical">
@@ -55,6 +55,7 @@
       <button id="readerSettingsBtn" class="icon-btn aa" aria-label="Reading settings">あ</button>
     </div>
   </header>
+  <div id="ghost" class="page ghost" hidden aria-hidden="true"></div>
   <div id="page" class="page"><article id="text" class="text"></article></div>
   <div id="pageNum" class="page-num" aria-live="polite"></div>
   <div id="status" class="status" hidden></div>
@@ -155,6 +156,11 @@
     </div>
   </div>
 
+  <div class="field check">
+    <input id="animateToggle" type="checkbox">
+    <label for="animateToggle">Slide between pages</label>
+  </div>
+
   <div class="field check settings-group">
     <input id="sentenceToggle" type="checkbox">
     <label for="sentenceToggle">Save the sentence with each new card</label>
@@ -163,7 +169,7 @@
 
 <div id="toast" class="toast" hidden role="status"></div>
 
-<script src="vendor/jszip.min.js?v=11011828"></script>
-<script type="module" src="app.js?v=11011828"></script>
+<script src="vendor/jszip.min.js?v=11011832"></script>
+<script type="module" src="app.js?v=11011832"></script>
 </body>
 </html>

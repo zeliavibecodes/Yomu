@@ -8,8 +8,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 /* =========================================================
    Settings (small values, kept in localStorage)
    ========================================================= */
-const DEFAULTS = { key: '', deck: '', furigana: 'unknown', direction: 'vertical', size: 19, sentence: true, theme: 'auto', font: 'mincho', underline: false };
+const DEFAULTS = { key: '', deck: '', furigana: 'unknown', direction: 'vertical', size: 19, sentence: true, theme: 'auto', font: 'mincho', underline: false, animate: true };
 const settings = { ...DEFAULTS };
+if (matchMedia('(prefers-reduced-motion: reduce)').matches) settings.animate = false;
 try { Object.assign(settings, JSON.parse(localStorage.getItem('yomu.settings') || '{}')); } catch {}
 function saveSettings() {
   try { localStorage.setItem('yomu.settings', JSON.stringify(settings)); } catch {}
@@ -32,6 +33,7 @@ function applySettings() {
   });
   $('sentenceToggle').checked = settings.sentence;
   $('marksToggle').checked = settings.underline;
+  $('animateToggle').checked = settings.animate;
   $('keyNotice').hidden = !!settings.key;
 }
 
@@ -546,14 +548,145 @@ function pageOf(node) {
     : Math.floor((r.left - box.left + el.scrollLeft) / pager.w);
 }
 function nextPage() {
+  if (slide.busy) return;
   countPages();
-  if (pager.page < pager.count - 1) goToPage(pager.page + 1);
+  if (pager.page < pager.count - 1) turnAnimated(pager.page + 1);
   else if (reader.chapter < reader.epub.spine.length - 1) loadChapter(reader.chapter + 1);
   else toast('This is the end of the book.');
 }
 function prevPage() {
-  if (pager.page > 0) goToPage(pager.page - 1);
+  if (slide.busy) return;
+  if (pager.page > 0) turnAnimated(pager.page - 1);
   else if (reader.chapter > 0) loadChapter(reader.chapter - 1, { page: 'last' });
+}
+
+/* =========================================================
+   Page slide
+   A second, hidden copy of the chapter sits behind the page. When you
+   swipe, it shows the next (or previous) page and both slide together
+   under your finger, then settle. Vertical books slide in from the left,
+   like turning a printed Japanese book.
+   ========================================================= */
+const slide = { busy: false, dirty: true, drag: null };
+const EASE = 'cubic-bezier(0.22, 0.8, 0.2, 1)';
+
+function markGhostDirty() { slide.dirty = true; }
+function refreshGhost() {
+  const copy = $('text').cloneNode(true);
+  copy.id = 'ghostText';
+  $('ghost').replaceChildren(copy);
+  slide.dirty = false;
+}
+function showGhost(page) {
+  if (slide.dirty) refreshGhost();
+  const g = $('ghost');
+  g.hidden = false;
+  if (pager.vertical) { g.scrollTop = page * pager.h; g.scrollLeft = 0; }
+  else { g.scrollLeft = page * pager.w; g.scrollTop = 0; }
+}
+function setX(el, x, ms = 0) {
+  el.style.transition = ms ? `transform ${ms}ms ${EASE}` : 'none';
+  el.style.transform = x ? `translate3d(${x}px,0,0)` : '';
+}
+// Screen direction that means "forward": right for vertical books, left for horizontal.
+const forwardSign = () => (pager.vertical ? 1 : -1);
+
+function turnAnimated(target) {
+  if (!settings.animate) return goToPage(target);
+  const dir = target > pager.page ? forwardSign() : -forwardSign();   // where the current page goes
+  const w = pager.w;
+  showGhost(target);
+  setX($('ghost'), -dir * w);          // the new page waits just off screen
+  $('reader').classList.add('turning');
+  slide.busy = true;
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    setX($('page'), dir * w, 300);
+    setX($('ghost'), 0, 300);
+    setTimeout(() => {
+      goToPage(target);
+      setX($('page'), 0);
+      $('ghost').hidden = true;
+      setX($('ghost'), 0);
+      $('reader').classList.remove('turning');
+      slide.busy = false;
+    }, 320);
+  }));
+}
+
+function dragStart(x, y) {
+  if (slide.busy || !reader.book) return;
+  slide.drag = { x0: x, y0: y, t0: performance.now(), dx: 0, active: false, lastX: x, lastT: performance.now(), v: 0, target: null };
+}
+function dragMove(x, y, e) {
+  const d = slide.drag;
+  if (!d) return;
+  const dx = x - d.x0, dy = y - d.y0;
+  if (!d.active) {
+    if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+    if (Math.abs(dx) < Math.abs(dy) * 1.2) { slide.drag = null; return; }   // mostly vertical: not a page turn
+    d.active = true;
+    $('reader').classList.add('turning');
+  }
+  e.preventDefault();
+  const now = performance.now();
+  d.v = (x - d.lastX) / Math.max(1, now - d.lastT);
+  d.lastX = x; d.lastT = now;
+  const forward = dx * forwardSign() > 0;
+  const target = forward ? pager.page + 1 : pager.page - 1;
+  countPages();
+  if (target < 0 || target >= pager.count || !settings.animate) {
+    // Next page is in another chapter (or animations are off): resist instead of sliding.
+    d.target = null;
+    setX($('page'), dx * 0.25);
+    $('ghost').hidden = true;
+  } else {
+    if (d.target !== target) { showGhost(target); d.target = target; }
+    setX($('page'), dx);
+    setX($('ghost'), dx > 0 ? dx - pager.w : dx + pager.w);
+  }
+  d.dx = dx;
+}
+function dragEnd() {
+  const d = slide.drag;
+  slide.drag = null;
+  if (!d || !d.active) return false;
+  const w = pager.w, dx = d.dx;
+  const fast = Math.abs(d.v) > 0.45 && Math.sign(d.v) === Math.sign(dx);
+  const far = Math.abs(dx) > w * 0.22;
+  const forward = dx * forwardSign() > 0;
+  if (d.target === null) {
+    setX($('page'), 0, 220);
+    setTimeout(() => $('reader').classList.remove('turning'), 240);
+    if (far || fast) forward ? nextPage() : prevPage();   // crosses into the next or previous chapter
+    return true;
+  }
+  if (far || fast) {
+    // Settle onto the new page; quicker when you flicked.
+    const remaining = 1 - Math.abs(dx) / w;
+    const ms = Math.round(Math.max(140, Math.min(320, remaining * (fast ? 260 : 340))));
+    slide.busy = true;
+    setX($('page'), Math.sign(dx) * w, ms);
+    setX($('ghost'), 0, ms);
+    setTimeout(() => {
+      goToPage(d.target);
+      setX($('page'), 0);
+      $('ghost').hidden = true;
+      setX($('ghost'), 0);
+      $('reader').classList.remove('turning');
+      slide.busy = false;
+    }, ms + 20);
+  } else {
+    // Not far enough: spring back.
+    slide.busy = true;
+    setX($('page'), 0, 240);
+    setX($('ghost'), dx > 0 ? -w : w, 240);
+    setTimeout(() => {
+      $('ghost').hidden = true;
+      $('reader').classList.remove('turning');
+      slide.busy = false;
+    }, 260);
+  }
+  return true;
 }
 // The first paragraph that shows on the current page, used to keep your
 // place when the text size, direction or screen size changes.
@@ -568,6 +701,7 @@ function currentBlock() {
 }
 function relayoutKeeping(block) {
   if (!reader.book) return;
+  markGhostDirty();
   requestAnimationFrame(() => {
     layoutPages();
     goToPage(pageOf(reader.blocks[block]));
@@ -650,6 +784,7 @@ async function loadChapter(index, { block = 0, frag = '', page: pageArg = null, 
     pump();
   }, { root: page, rootMargin: '150%' });
   if (settings.key) reader.blocks.forEach((b) => reader.observer.observe(b));
+  markGhostDirty();
   saveProgress();
 }
 
@@ -684,6 +819,7 @@ async function pump() {
       });
       countPages();
       $('pageNum').textContent = `${pager.page + 1} / ${pager.count}`;
+      markGhostDirty();
       errors = 0;
     } catch (e) {
       batch.forEach((b) => delete b.el.dataset.parsed);
@@ -766,6 +902,7 @@ function openWord(el) {
 }
 
 function updateWordEverywhere(v) {
+  markGhostDirty();
   document.querySelectorAll(`.w[data-k="${CSS.escape(v.key)}"]`).forEach((el) => {
     el.classList.remove('st-none', 'st-learning', 'st-known');
     el.classList.add(stateClass(v.state));
@@ -976,21 +1113,19 @@ function init() {
   });
   // Taps in the margins around the text also turn pages.
   $('page').addEventListener('click', (e) => { if (e.target === $('page')) tapZone(e.clientX); });
-  let touch = null;
+  // Swipes: the page follows your finger.
+  let suppressClick = false;
   $('page').addEventListener('touchstart', (e) => {
-    const t = e.touches[0];
-    touch = e.touches.length === 1 ? { x: t.clientX, y: t.clientY } : null;
+    if (e.touches.length !== 1) { slide.drag = null; return; }
+    dragStart(e.touches[0].clientX, e.touches[0].clientY);
   }, { passive: true });
-  $('page').addEventListener('touchend', (e) => {
-    if (!touch) return;
-    const t = e.changedTouches[0];
-    const dx = t.clientX - touch.x, dy = t.clientY - touch.y;
-    touch = null;
-    if (Math.abs(dx) < 40 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
-    e.preventDefault();
-    // Japanese vertical books turn right-to-left: swipe toward the right for the next page.
-    if ((dx > 0) === pager.vertical) nextPage(); else prevPage();
-  });
+  $('page').addEventListener('touchmove', (e) => {
+    if (slide.drag) dragMove(e.touches[0].clientX, e.touches[0].clientY, e);
+  }, { passive: false });
+  const endTouch = () => { if (dragEnd()) { suppressClick = true; setTimeout(() => (suppressClick = false), 400); } };
+  $('page').addEventListener('touchend', endTouch);
+  $('page').addEventListener('touchcancel', endTouch);
+  $('page').addEventListener('click', (e) => { if (suppressClick) { e.stopPropagation(); e.preventDefault(); } }, true);
   window.addEventListener('resize', () => { if (reader.book) relayoutKeeping(currentBlock()); });
 
   $('addBtn').addEventListener('click', () => {
@@ -1019,6 +1154,7 @@ function init() {
   $('sizeUp').addEventListener('click', () => resize(2));
   $('sentenceToggle').addEventListener('change', (e) => { settings.sentence = e.target.checked; saveSettings(); });
   $('marksToggle').addEventListener('change', (e) => { settings.underline = e.target.checked; saveSettings(); });
+  $('animateToggle').addEventListener('change', (e) => { settings.animate = e.target.checked; saveSettings(); });
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') return closeSheet();

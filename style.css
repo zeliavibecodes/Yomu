@@ -173,13 +173,18 @@ svg.i { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-widt
 .reader-bar-actions { display: flex; gap: 0; }
 .aa { font-family: var(--mincho); font-size: 19px; }
 
-.page { flex: 1; overflow: hidden; touch-action: pan-y pinch-zoom; }
+.page { flex: 1; overflow: hidden; touch-action: pan-y pinch-zoom; background: var(--paper); will-change: transform; }
+.ghost { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+#page { position: relative; z-index: 1; }
+/* While a page slides, its edge casts a soft shadow, like paper over paper */
+.turning #page, .turning .ghost { box-shadow: 0 0 40px rgba(0, 0, 0, 0.10); }
+:root[data-theme="dark"] .turning #page, :root[data-theme="dark"] .turning .ghost { box-shadow: 0 0 40px rgba(0, 0, 0, 0.6); }
 .safe-probe { position: fixed; left: 0; width: 0; visibility: hidden; pointer-events: none; }
 .safe-probe.top { top: 0; height: env(safe-area-inset-top, 0px); }
 .safe-probe.bottom { bottom: 0; height: env(safe-area-inset-bottom, 0px); }
 .page-num {
   position: absolute; left: 0; right: 0; bottom: calc(var(--safe-bottom) + 14px);
-  text-align: center; font-size: 11px; letter-spacing: 0.04em; color: var(--faint); pointer-events: none;
+  text-align: center; font-size: 11px; letter-spacing: 0.04em; color: var(--faint); pointer-events: none; z-index: 3;
   font-variant-numeric: tabular-nums;
 }
 
@@ -259,7 +264,7 @@ svg.i { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-widt
 .status {
   position: absolute; left: 50%; transform: translateX(-50%);
   bottom: calc(var(--safe-bottom) + 34px);
-  font-size: 11px; color: var(--muted); letter-spacing: 0.02em;
+  font-size: 11px; color: var(--muted); letter-spacing: 0.02em; z-index: 3;
 }
 
 /* ---------- Sheets ---------- */
