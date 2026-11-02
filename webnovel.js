@@ -10,9 +10,14 @@ const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// The online relay's address. Empty until the Cloudflare relay is set up (see relay/README.md).
-const ONLINE_RELAY = '';
-const RELAY = /github\.io$/.test(location.hostname) ? ONLINE_RELAY : 'relay';
+// The online relays (see relay/README.md). Narou's episode pages refuse Vercel's servers,
+// so they need a second relay; until it exists, Narou is left out of the online version.
+const ONLINE = /github\.io$/.test(location.hostname);
+const ONLINE_RELAY = 'https://yomu-vercel.vercel.app/api/relay';
+const NAROU_EPISODE_RELAY = '';
+const RELAY = ONLINE ? ONLINE_RELAY : 'relay';
+const relayFor = (url) => (ONLINE && /^https:\/\/ncode\.syosetu\.com\//.test(url) ? NAROU_EPISODE_RELAY : RELAY);
+export const narouReady = !ONLINE || !!NAROU_EPISODE_RELAY;
 const BATCH = 10;        // episodes per download
 const GAP = 1200;        // wait between episode pages, to keep the load on the sites light
 
@@ -22,11 +27,12 @@ export const relayReady = !!RELAY;
 /* ---------- Fetching through the relay ---------- */
 
 async function fetchVia(url) {
-  if (!RELAY) throw new Error('Web novels aren’t connected on the online version of Yomu yet.');
+  const relay = relayFor(url);
+  if (!relay) throw new Error('Narou stories can’t be read in the online version of Yomu yet.');
   let res = null;
   for (let attempt = 0; attempt < 3; attempt++) {   // a page sometimes fails once; try again after a pause
     if (attempt) await sleep(3000);
-    try { res = await fetch(`${RELAY}?url=${encodeURIComponent(url)}`); } catch { res = null; continue; }
+    try { res = await fetch(`${relay}?url=${encodeURIComponent(url)}`); } catch { res = null; continue; }
     if (res.ok || res.status < 500) break;
   }
   if (!res) throw new Error('The site couldn’t be reached. Check your connection.');
@@ -184,7 +190,7 @@ export async function search({ tags = [], kk = [], nr = [], order = 'popular' })
   const words = tags.length ? tags : [''];
   for (const w of words) {
     jobs.push(kkSearch({ query: w, genres: kk, order }).catch(() => []));
-    jobs.push(nrSearch({ word: w, genres: nr, order: order === 'popular' ? 'hyoka' : 'weekly' }).catch(() => []));
+    if (narouReady) jobs.push(nrSearch({ word: w, genres: nr, order: order === 'popular' ? 'hyoka' : 'weekly' }).catch(() => []));
   }
   const lists = await Promise.all(jobs);
   // Take turns between the result lists so both sites and every tag are represented.

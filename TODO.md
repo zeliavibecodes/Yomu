@@ -2,7 +2,7 @@
 
 In order. Done items move to the bottom.
 
-1. **Web novels online.** Set up the Cloudflare relay so the online version can use Kakuyomu and Narou.
+1. **Narou online.** Find a relay that Narou's episode pages accept (Kakuyomu already works online).
 2. **E-ink mode.** Pure black and white, no shadows or animations, larger tap areas. Postponed.
 
 ## Done

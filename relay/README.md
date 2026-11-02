@@ -3,7 +3,7 @@
 Kakuyomu and Narou don't let other websites read their pages, so Yomu fetches them through this small relay. It only passes on these two sites' story, episode and search pages, and only to Yomu.
 
 - **On the Mac:** nothing to set up. `python3 serve.py` includes the relay.
-- **Online:** the relay runs on Vercel, in Tokyo (`vercel/api/relay.js`). Cloudflare doesn't work: both sites refuse requests from Cloudflare's servers.
+- **Online:** the relay runs on Vercel, in Tokyo (`vercel/api/relay.js`), at https://yomu-vercel.vercel.app/api/relay. Kakuyomu works fully. Narou's search works, but its episode pages refuse Vercel's servers, so Narou is left out of the online version for now. (Cloudflare had the opposite problem: Kakuyomu and Narou's search refused it.)
 
 ## Set up the online relay (once, about 5 minutes)
 
