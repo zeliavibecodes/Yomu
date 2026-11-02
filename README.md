@@ -35,7 +35,7 @@ Keep the original files in iCloud Drive. The copy inside Yomu is for reading, no
 
 ## Using it
 
-- **Tap a word** to see its reading, meanings, and the sentence it's in.
+- **Tap a word** to see its reading, meanings, and the sentence it's in. A line under the word says how common it is (Very common, Common, Less common, Uncommon or Rare), from jpdb's ranking of the words most used in Japanese media, so you can decide whether it's worth adding to a deck.
 - **Add to deck** adds it to your chosen deck, with the sentence attached (you can turn that off in Settings).
 - **I know this** marks it as known on jpdb, so it stops showing readings.
 - **Turn pages** by tapping the left or right side of the screen, or swiping. Vertical books read right to left, like a printed Japanese book: tap the left side or swipe right for the next page. Horizontal books are the other way round.

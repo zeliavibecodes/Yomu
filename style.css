@@ -584,3 +584,11 @@ button.add-book { border: 0; font-family: inherit; }
 .book-spine.tinted::before { content: ""; position: absolute; inset: 0 0 0 auto; width: 6px; background: var(--tint); }
 :root[data-theme="dark"] .book-spine.tinted { --tone-bg: color-mix(in srgb, var(--tint) 20%, #1C1C1E); --tone-ink: #EEECE7; --tone-muted: color-mix(in srgb, var(--tint) 55%, #A09C95); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .book-spine.tinted { --tone-bg: color-mix(in srgb, var(--tint) 20%, #1C1C1E); --tone-ink: #EEECE7; --tone-muted: color-mix(in srgb, var(--tint) 55%, #A09C95); } }
+
+/* How common a word is */
+.word-freq { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; margin: -8px 0 14px; font-size: 13px; color: var(--muted); }
+.word-freq b { font-weight: 600; color: var(--ink); }
+.freq-bars { display: inline-flex; align-items: flex-end; gap: 2px; height: 12px; }
+.freq-bars i { display: block; width: 3px; border-radius: 1px; background: var(--fill-strong); }
+.freq-bars i:nth-child(1) { height: 4px; } .freq-bars i:nth-child(2) { height: 6.5px; } .freq-bars i:nth-child(3) { height: 9px; } .freq-bars i:nth-child(4) { height: 12px; }
+.freq-bars i.on { background: var(--ink); }

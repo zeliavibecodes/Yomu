@@ -193,7 +193,7 @@ function guessType(p) {
    jpdb
    ========================================================= */
 const TOKEN_FIELDS = ['vocabulary_index', 'position', 'length', 'furigana'];
-const VOCAB_FIELDS = ['vid', 'sid', 'spelling', 'reading', 'meanings_chunks', 'meanings_part_of_speech', 'card_state'];
+const VOCAB_FIELDS = ['vid', 'sid', 'spelling', 'reading', 'meanings_chunks', 'meanings_part_of_speech', 'card_state', 'frequency_rank'];
 
 class JpdbError extends Error { constructor(code, msg) { super(msg); this.code = code; } }
 
@@ -238,9 +238,9 @@ async function parseTexts(texts) {
     vocabulary_fields: VOCAB_FIELDS,
   });
   const keys = data.vocabulary.map((v) => {
-    const [vid, sid, spelling, reading, chunks, pos, card_state] = v;
+    const [vid, sid, spelling, reading, chunks, pos, card_state, freq] = v;
     const key = vid + '/' + sid;
-    vocab.set(key, { key, vid, sid, spelling, reading, meanings: chunks.map((g, i) => ({ g, pos: pos[i] || [] })), state: card_state });
+    vocab.set(key, { key, vid, sid, spelling, reading, meanings: chunks.map((g, i) => ({ g, pos: pos[i] || [] })), state: card_state, freq: freq ?? null });
     return key;
   });
   return data.tokens.map((list) =>
@@ -1333,6 +1333,29 @@ function sentenceAround(el) {
   return { full: text.slice(a, b).trim(), before: text.slice(a, s).trimStart(), word: text.slice(s, e), after: text.slice(e, b).trimEnd() };
 }
 
+// How common a word is, from jpdb's ranking of words by how often they appear in Japanese media.
+function freqHtml(v) {
+  if (v.freq === undefined) return '';
+  const r = v.freq;
+  const [label, note] = !r ? ['Rare', 'Not among the 50,000 most used words']
+    : r <= 1500 ? ['Very common', `One of the ${r <= 500 ? '500' : '1,500'} most used words`]
+    : r <= 5000 ? ['Common', 'One of the 5,000 most used words']
+    : r <= 15000 ? ['Less common', 'One of the 15,000 most used words']
+    : r <= 30000 ? ['Uncommon', 'One of the 30,000 most used words']
+    : ['Rare', 'Outside the 30,000 most used words'];
+  const bars = !r ? 0 : r <= 1500 ? 4 : r <= 5000 ? 3 : r <= 15000 ? 2 : r <= 30000 ? 1 : 0;
+  return `<span class="freq-bars" aria-hidden="true">${[1, 2, 3, 4].map((i) => `<i class="${i <= bars ? 'on' : ''}"></i>`).join('')}</span><b>${label}</b><span>${note}${r ? ` · #${r.toLocaleString()}` : ''}</span>`;
+}
+// Words saved on the phone before this existed have no ranking yet: ask jpdb for it once.
+async function fillFreq(v) {
+  if (v.freq !== undefined || !v.vid || !settings.key || !navigator.onLine) return;
+  try {
+    const data = await jpdb('lookup-vocabulary', { list: [[v.vid, v.sid]], fields: ['frequency_rank'] });
+    v.freq = data.vocabulary_info?.[0]?.[0] ?? null;
+    if (current?.v === v) { $('wFreq').innerHTML = freqHtml(v); $('wFreq').hidden = false; }
+  } catch {}
+}
+
 function openWord(el) {
   const v = vocab.get(el.dataset.k);
   if (!v) return;
@@ -1344,6 +1367,9 @@ function openWord(el) {
   const st = $('wState');
   st.textContent = v.local && !v.state ? 'Offline dictionary' : stateLabel(v.state);
   st.className = 'word-state' + (v.state || v.local ? '' : ' none');
+  $('wFreq').innerHTML = freqHtml(v);
+  $('wFreq').hidden = v.freq === undefined;
+  fillFreq(v);
   $('wMeanings').innerHTML = v.meanings.slice(0, 5).map((m) =>
     `<li>${esc(m.g.join('; '))}${m.pos.length ? `<span class="pos">${esc(m.pos.join(', '))}</span>` : ''}</li>`).join('');
   const s = current.sentence;
