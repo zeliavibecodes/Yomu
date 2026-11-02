@@ -150,11 +150,54 @@ function diffHtml(f) {
   return f ? `<span class="w-lv">${level(f.pct)}</span><span class="w-bar"><b style="width:${f.pct}%"></b></span><span class="w-pct">${f.pct}%</span>`
     : '<span class="w-lv w-wait">Checking…</span>';
 }
+/* ---------- English titles and summaries (Gemini, through the Vercel relay) ---------- */
+
+const ENGLISH_URL = 'https://yomu-vercel.vercel.app/api/summary';
+const EN_KEY = 'yomu.english';
+let englishOff = false;   // set when the relay has no Gemini key, so Yomu stops asking
+function english(s) {
+  try { return JSON.parse(localStorage.getItem(EN_KEY) || '{}')[fitId(s)] || null; } catch { return null; }
+}
+function saveEnglish(s, data) {
+  try {
+    const all = JSON.parse(localStorage.getItem(EN_KEY) || '{}');
+    all[fitId(s)] = { ...(all[fitId(s)] || {}), ...data };
+    localStorage.setItem(EN_KEY, JSON.stringify(all));
+  } catch {}
+}
+async function askEnglish(body) {
+  if (englishOff) return null;
+  try {
+    const res = await fetch(ENGLISH_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (res.status === 503) { englishOff = true; return null; }
+    return res.ok ? await res.json() : null;
+  } catch { return null; }
+}
+const enHtml = (e) => (e?.title ? `<span class="w-en-t">${esc(e.title)}</span>${e.line ? `<span class="w-en-l">${esc(e.line)}</span>` : ''}` : '');
+
+// English titles and one-line descriptions for the stories on screen, in one request.
+let englishBusy = false;
+async function fillEnglish() {
+  if (englishBusy || englishOff) return;
+  const visible = sorted().slice(0, state.shown).filter((s) => !english(s)?.title);
+  if (!visible.length) return;
+  englishBusy = true;
+  const out = await askEnglish({ mode: 'list', stories: visible.map((s) => ({ id: fitId(s), title: s.title, pitch: s.pitch, tags: s.tags })) });
+  englishBusy = false;
+  for (const x of out?.stories || []) {
+    const s = visible.find((v) => fitId(v) === x.id);
+    if (!s) continue;
+    saveEnglish(s, { title: x.title, line: x.line });
+    document.querySelectorAll(`.w-list [data-s="${CSS.escape(x.id)}"] .w-en`).forEach((el) => { el.innerHTML = enHtml(english(s)); el.hidden = false; });
+  }
+}
+
 function row(s) {
   const t = topics(s);
   return `<li><button class="w-card" data-s="${esc(fitId(s))}">
     <span class="w-diff">${Y().settings.key ? diffHtml(cachedFit(s)) : ''}</span>
     <span class="w-title">${esc(shortTitle(s.title))}</span>
+    <span class="w-en" ${english(s)?.title ? '' : 'hidden'}>${enHtml(english(s))}</span>
     ${t.length ? `<span class="w-topics">${t.map((x) => `<span>${esc(x)}</span>`).join('')}</span>` : ''}
     <span class="w-meta">${esc([s.genre, timeLabel(s.chars), status(s)].filter(Boolean).join(' · '))}</span>
   </button></li>`;
@@ -182,7 +225,7 @@ export async function render() {
     : !sorted().length ? '<p class="hint d-loading">Nothing matches. Try another mood or genre.</p>'
     : `<p class="hint w-status" id="wnStatus">${statusLine()}</p><ul class="w-list">${sorted().slice(0, state.shown).map(row).join('')}</ul>`
       + (sorted().length > state.shown ? '<p class="w-more"><button class="btn" data-more>Show more</button></p>' : ''));
-  if (!state.loading) queueFits();
+  if (!state.loading) { queueFits(); fillEnglish(); }
 }
 
 async function load(key) {
@@ -242,6 +285,11 @@ function fitHtml(s) {
     <div class="bar"><b style="width:${f.pct}%"></b></div>
     <p>${f.newWords < 5 ? 'Almost no new words in the first episode.' : `About ${f.newWords.toLocaleString()} new words in the first episode.`}</p>`;
 }
+function summaryHtml(s) {
+  const e = english(s);
+  if (!e?.summary) return '<p class="w-sum-wait">Writing an English summary…</p>';
+  return `${e.title ? `<p class="w-sum-t">${esc(e.title)}</p>` : ''}<p class="w-sum-p">${esc(e.summary)}</p>`;
+}
 function opening(text, n) {
   const s = text.replace(/\n+/g, ' ').trim();
   if (s.length <= n) return s;
@@ -265,6 +313,7 @@ async function openStory(id) {
       ${t.length ? `<div class="w-topics w-topics-lg">${t.map((x) => `<span>${esc(x)}</span>`).join('')}</div>` : ''}
       <div class="tags">${tags.map((x) => `<span class="tag">${esc(x)}</span>`).join('')}</div>
     </div>
+    <div class="w-sum" id="wnSum" ${englishOff ? 'hidden' : ''}>${summaryHtml(s)}</div>
     <div class="fitbox" id="wnFit">${fitHtml(s)}</div>
     ${s.pitch ? `<p class="lbl">In one line</p><p class="w-pitch">${esc(s.pitch)}</p>` : ''}
     ${s.intro ? `<p class="lbl">About</p><p class="w-intro" id="wnIntro">${esc(s.intro.replace(/[ \t　]+\n/g, '\n').replace(/\n{2,}/g, '\n').trim())}</p>` : ''}
@@ -277,6 +326,14 @@ async function openStory(id) {
     <p class="hint" id="wnMsg"></p>
     <p class="hint"><a href="${esc(s.url)}" target="_blank" rel="noopener">Open on ${SITES[s.site]}</a></p>`;
   Y().openSheet('bookSheet');
+  if (!englishOff && !english(s)?.summary) {
+    askEnglish({ mode: 'story', story: { title: s.title, pitch: s.pitch, intro: s.intro, tags: s.tags } }).then((out) => {
+      if (out?.summary) saveEnglish(s, { title: out.title || english(s)?.title, summary: out.summary });
+      if (current !== s) return;
+      const el = $('wnSum');
+      if (out?.summary) el.innerHTML = summaryHtml(s); else el.hidden = true;
+    });
+  }
   $('wnIntro')?.addEventListener('click', (e) => e.currentTarget.classList.toggle('open'));
   $('wnAdd').onclick = () => (inLib ? Y().openBook(inLib) : add(s));
   $('wnSample').onclick = () => toggleSample(s);
