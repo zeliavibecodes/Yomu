@@ -140,6 +140,7 @@ function nrStory(x) {
     // What readers think: bookmarks, and ratings out of 10 (5 for the story, 5 for the writing).
     bookmarks: +x.fav_novel_cnt || 0, points: +x.all_point || 0, ratings: +x.all_hyoka_cnt || 0, reviewCount: +x.review_cnt || 0,
     book: /書籍化|コミカライズ/.test(x.title + ' ' + (x.story || '').slice(0, 200)), headlines: [],
+  };
 }
 async function nrApi(params) {
   const p = new URLSearchParams({ out: 'json', of: NR_FIELDS, ...params });
