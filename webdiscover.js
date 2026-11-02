@@ -444,9 +444,15 @@ function opening(text, n) {
   return end > 40 ? cut.slice(0, end + 1) : s.slice(0, n) + '…';
 }
 
-async function openStory(id) {
+function openStory(id) {
   const s = state.stories.find((x) => fitId(x) === id) || savedAll()[id];
-  if (!s) return;
+  if (s) showStory(s);
+}
+// A story found outside Discover, from a pasted link.
+export function previewStory(s) {
+  return showStory(s);
+}
+async function showStory(s) {
   current = s;
   const inLib = await Y().findWebBook(s.site, s.id);
   const tags = [s.genre, timeLabel(s.chars), s.short ? '' : `${s.count} episodes`, status(s), SITES[s.site]].filter(Boolean);

@@ -316,31 +316,37 @@ export async function getMore(rec, buf, msg) {
 
 /* ---------- The add sheet ---------- */
 
-let added = null;   // id of the book just added, so the button can open it
+
+// A story's details from its link, in the same form as search results, for a preview.
+export async function storyFromLink(text) {
+  const link = parseLink(text);
+  if (!link) throw new Error('Paste a link to a story on kakuyomu.jp or syosetu.com.');
+  if (link.site === 'narou' && !narouReady) throw new Error('Narou stories can’t be read in the online version of Yomu yet.');
+  const { episodes, ...story } = await getWork(link.site, link.work);
+  return story;
+}
 
 export function init() {
+  // Pasting a link opens the story's details (difficulty, English summary, what readers say),
+  // where you can add it to your library or save it for later.
   $('kkAdd').addEventListener('click', async () => {
     const btn = $('kkAdd'), say = (t) => ($('kkMsg').textContent = t);
-    if (added) { const id = added; resetSheet(); return Y().openBook(id); }
     btn.disabled = true;
+    say('Looking up the story…');
     try {
-      const { id, existed } = await addStory($('kkLink').value, say);
-      $('kkLink').value = '';
-      say(existed ? 'This story is already in your library.' : 'Added to your library.');
-      added = id;
-      btn.textContent = 'Open';
+      const story = await storyFromLink($('kkLink').value);
+      const wd = await import(`./webdiscover.js${new URL(import.meta.url).search}`);
+      resetSheet();
+      wd.previewStory(story);
     } catch (e) {
       say(e.message || 'Something went wrong.');
     } finally {
       btn.disabled = false;
     }
   });
-  $('kkLink').addEventListener('input', () => { if (added) resetSheet(true); });
 }
 
 export function resetSheet(keepLink = false) {
   if (!keepLink) $('kkLink').value = '';
-  added = null;
   $('kkMsg').textContent = '';
-  $('kkAdd').textContent = 'Add';
 }
