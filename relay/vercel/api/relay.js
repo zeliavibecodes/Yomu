@@ -8,7 +8,9 @@ const ALLOWED = [
   /^https:\/\/kakuyomu\.jp\/search\?[^#]*$/,
   /^https:\/\/ncode\.syosetu\.com\/n[0-9a-z]+\/(\d+\/)?$/,
   /^https:\/\/api\.syosetu\.com\/novelapi\/api\/\?[^#]*$/,
+  /^https:\/\/cdn\.kdkw\.jp\/cover_\d+\/[\w\/.-]+\.(webp|jpe?g|png)$/,   // official book covers
 ];
+const IMAGE = /^https:\/\/cdn\.kdkw\.jp\//;
 const ALLOWED_ORIGINS = ['https://zeliavibecodes.github.io'];
 const AGENT = 'Yomu personal reader (one reader, one episode at a time)';
 
@@ -33,7 +35,13 @@ export async function GET(request) {
     return new Response('The site couldn’t be reached.', { status: 502, headers: cors });
   }
   // Episodes rarely change, so let the phone keep them for a day; searches and story pages for an hour.
-  const ttl = /\/episodes\/\d+$|syosetu\.com\/n[0-9a-z]+\/\d+\/$/.test(target) ? 86400 : 3600;
+  const ttl = /\/episodes\/\d+$|syosetu\.com\/n[0-9a-z]+\/\d+\/$/.test(target) || IMAGE.test(target) ? 86400 : 3600;
+  if (IMAGE.test(target)) {
+    return new Response(await res.arrayBuffer(), {
+      status: res.status,
+      headers: { ...cors, 'Content-Type': res.headers.get('content-type') || 'image/webp', 'Cache-Control': `private, max-age=${ttl}` },
+    });
+  }
   return new Response(await res.text(), {
     status: res.status,
     headers: { ...cors, 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': `private, max-age=${ttl}` },

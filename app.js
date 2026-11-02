@@ -1507,15 +1507,39 @@ function shortTitle(t) {
 }
 // A typeset cover for books without one: the title sized to fit, the author set apart,
 // where the book came from, and one of a few quiet tones picked from the title.
-function typesetCover(title, author, source) {
+function typesetCover(title, author, source, color) {
   let h = 0;
   for (const ch of title) h = (h * 31 + ch.codePointAt(0)) >>> 0;
   const n = [...title].length;
   const size = n <= 4 ? 'xl' : n <= 8 ? 'l' : n <= 14 ? 'm' : n <= 22 ? 's' : 'xs';
-  return `<div class="book-cover"><div class="book-spine tone-${h % 6} size-${size}"><span class="st">${esc(title)}</span>`
+  // Kakuyomu stories use the colour their author picked; other books get one of the quiet tones.
+  const tinted = /^#[0-9a-f]{6}$/i.test(color || '');
+  return `<div class="book-cover"><div class="book-spine ${tinted ? 'tinted' : `tone-${h % 6}`} size-${size}"${tinted ? ` style="--tint:${color}"` : ''}><span class="st">${esc(title)}</span>`
     + `${author ? `<span class="sa">${esc(author)}</span>` : ''}${source ? `<span class="ss">${esc(source)}</span>` : ''}</div></div>`;
 }
 const sourceOf = (b) => (b.aozora ? '青空文庫' : (b.web?.site || (b.kakuyomu ? 'kakuyomu' : '')) === 'kakuyomu' ? 'カクヨム' : b.web?.site === 'narou' ? '小説家になろう' : '');
+
+// Kakuyomu books added before covers existed: look up their cover and colour once, quietly.
+let coversRunning = false;
+const coversTried = new Set();   // so a failed lookup isn't retried until the app is opened again
+async function fillCovers(books) {
+  if (coversRunning || !navigator.onLine) return;
+  const todo = books.filter((b) => !b.coverChecked && !b.cover && !coversTried.has(b.id) && ((b.web?.site || (b.kakuyomu ? 'kakuyomu' : '')) === 'kakuyomu'));
+  if (!todo.length) return;
+  coversRunning = true;
+  try {
+    const wn = await import(`./webnovel.js${V}`);
+    for (const b of todo) {
+      coversTried.add(b.id);
+      const info = await wn.coverFor('kakuyomu', (b.web || b.kakuyomu).work).catch(() => null);
+      if (!info) continue;
+      const rec = await db.get('books', b.id);
+      if (!rec) continue;
+      await db.put('books', { ...rec, color: info.color || rec.color || '', coverChecked: true, ...(info.cover ? { cover: info.cover } : {}) });
+    }
+  } finally { coversRunning = false; }
+  renderShelf();
+}
 
 async function renderShelf() {
   coverUrls.splice(0).forEach((u) => URL.revokeObjectURL(u));
@@ -1532,10 +1556,10 @@ async function renderShelf() {
     el.className = 'book-item';
     let cover;
     if (b.cover) {
-      const u = URL.createObjectURL(b.cover);
+      const u = URL.createObjectURL(b.cover instanceof Blob ? b.cover : new Blob([b.cover.data], { type: b.cover.type }));
       coverUrls.push(u);
       cover = `<div class="book-cover"><img src="${u}" alt=""></div>`;
-    } else cover = typesetCover(b.web || b.kakuyomu ? shortTitle(b.title) : b.title, b.author, sourceOf(b));
+    } else cover = typesetCover(b.web || b.kakuyomu ? shortTitle(b.title) : b.title, b.author, sourceOf(b), b.color);
     const shown = b.web || b.kakuyomu ? shortTitle(b.title) : b.title;
     const pct = b.lastOpened ? Math.max(1, b.percent ?? Math.round(((b.chapter || 0) + 1) / (b.chapters || 1) * 100)) : 0;
     const prog = !b.lastOpened ? 'Not started' : pct >= 100 ? 'Finished' : `${pct}% read`;
@@ -1544,6 +1568,7 @@ async function renderShelf() {
       ${editing ? `<button class="book-remove" data-remove="${b.id}" aria-label="Remove ${esc(b.title)}">✕</button>` : ''}`;
     $('shelf').appendChild(el);
   }
+  fillCovers(books);
 }
 
 // Store an EPUB in the library and return its id.

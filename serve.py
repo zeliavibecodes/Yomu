@@ -16,6 +16,7 @@ ALLOWED = [
     re.compile(r"^https://kakuyomu\.jp/search\?[^#]*$"),
     re.compile(r"^https://ncode\.syosetu\.com/n[0-9a-z]+/(\d+/)?$"),
     re.compile(r"^https://api\.syosetu\.com/novelapi/api/\?[^#]*$"),
+    re.compile(r"^https://cdn\.kdkw\.jp/cover_\d+/[\w/.-]+\.(webp|jpe?g|png)$"),   # official book covers
 ]
 AGENT = "Yomu personal reader (one reader, one episode at a time)"
 
@@ -34,6 +35,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             req = urllib.request.Request(target, headers={"User-Agent": AGENT})
             with urllib.request.urlopen(req, timeout=20) as r:
                 body = r.read()
+                kind = r.headers.get("Content-Type", "")
         except urllib.error.HTTPError as e:
             self.send_response(e.code)
             self.send_header("X-Yomu-Relay", "1")
@@ -43,7 +45,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self.send_error(502)
         self.send_response(200)
         self.send_header("X-Yomu-Relay", "1")
-        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Type", kind if kind.startswith("image/") else "text/html; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)

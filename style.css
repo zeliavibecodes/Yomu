@@ -578,3 +578,9 @@ button.add-book { border: 0; font-family: inherit; }
 .kk-results li:last-child button { border-bottom: 0; }
 .kk-results .t { font-family: var(--mincho); font-size: 17px; font-weight: 600; line-height: 1.4; }
 .kk-results .a { font-size: 13px; color: var(--muted); }
+
+/* Kakuyomu stories: a soft wash of the colour the author picked, with a full-colour band on the spine side */
+.book-spine.tinted { --tone-bg: color-mix(in srgb, var(--tint) 16%, #F4F2EE); --tone-ink: #1D1D1F; --tone-muted: color-mix(in srgb, var(--tint) 45%, #6B6862); }
+.book-spine.tinted::before { content: ""; position: absolute; inset: 0 0 0 auto; width: 6px; background: var(--tint); }
+:root[data-theme="dark"] .book-spine.tinted { --tone-bg: color-mix(in srgb, var(--tint) 20%, #1C1C1E); --tone-ink: #EEECE7; --tone-muted: color-mix(in srgb, var(--tint) 55%, #A09C95); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .book-spine.tinted { --tone-bg: color-mix(in srgb, var(--tint) 20%, #1C1C1E); --tone-ink: #EEECE7; --tone-muted: color-mix(in srgb, var(--tint) 55%, #A09C95); } }

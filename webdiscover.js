@@ -487,6 +487,7 @@ async function showStory(s) {
       if (out?.summary) saveEnglish(s, { title: out.title || english(s)?.title, summary: out.summary });
       if (current !== s) return;
       const el = $('wnSum');
+      if (!el) return;
       if (out?.summary) el.innerHTML = summaryHtml(s); else el.hidden = true;
     });
   }
@@ -535,7 +536,7 @@ async function add(s) {
     btn.onclick = () => Y().openBook(id);
     say('Added to your library. More episodes download when you reach the end.');
   } catch (e) {
-    say('Couldn’t add this story: ' + (e.message || 'unknown error'));
+    say('Couldn’t add this story: ' + (e?.message || 'unknown error'));
   } finally {
     btn.disabled = false;
   }

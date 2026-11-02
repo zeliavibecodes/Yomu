@@ -44,6 +44,25 @@ async function fetchVia(url) {
 }
 const fetchDoc = async (url) => new DOMParser().parseFromString(await fetchVia(url), 'text/html');
 
+// An official book cover, through the relay (the image site doesn't let other websites read it).
+async function fetchImage(url) {
+  const relay = relayFor(url);
+  if (!relay || !url) return null;
+  try {
+    const res = await fetch(`${relay}?url=${encodeURIComponent(url)}`);
+    const type = res.headers.get('content-type') || '';
+    if (!res.ok || !/^image\//.test(type)) return null;
+    // Kept as plain bytes: some browsers can't store image files in the app's database.
+    return { type, data: await res.arrayBuffer() };
+  } catch { return null; }
+}
+// Cover and colour for a Kakuyomu story already in the library (books added before covers existed).
+export async function coverFor(site, id) {
+  if (site !== 'kakuyomu') return { color: '', cover: null };
+  const w = await kkWork(id);
+  return { color: w.color, cover: w.cover ? await fetchImage(w.cover) : null };
+}
+
 /* ---------- Links ---------- */
 
 export function parseLink(text) {
@@ -76,6 +95,8 @@ function kkStory(st, w) {
     // What readers think: total stars (each reader gives up to 3), whether it became a book,
     // and the headlines of a couple of reader reviews.
     stars: +w.totalReviewPoint || 0, book: !!w.hasPublication,
+    // The colour the author picked for the story's page, and the official cover if it became a book.
+    color: /^#[0-9a-f]{6}$/i.test(w.baseColor || '') ? w.baseColor : '', cover: w.adminCoverImageUrl || '',
     headlines: (w.textualWorkReviewsForCatchphraseInRandom || []).map((r) => ref(r)?.title).filter(Boolean),
   };
 }
@@ -290,7 +311,8 @@ export async function addStory(target, msg) {
   await sleep(GAP);
   const { zip, have } = await addEpisodes(null, work, 0, BATCH, (i, n) => msg(n > 1 ? `Downloading episode ${i + 1} of ${n}…` : 'Downloading…'));
   const buf = await (await zip.generateAsync({ type: 'blob', mimeType: 'application/epub+zip' })).arrayBuffer();
-  const id = await Y().addBookBuffer(buf, { web: webInfo(work, have) });
+  const cover = work.cover ? await fetchImage(work.cover) : null;
+  const id = await Y().addBookBuffer(buf, { web: webInfo(work, have), color: work.color || '', coverChecked: true, ...(cover ? { cover } : {}) });
   return { id, existed: false };
 }
 
