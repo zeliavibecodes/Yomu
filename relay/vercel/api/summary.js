@@ -5,7 +5,7 @@
 // POST { mode: 'story', story: { title, pitch, intro, tags } }   → { title, summary }
 
 const ORIGINS = [/^https:\/\/zeliavibecodes\.github\.io$/, /^http:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?$/];
-const MODELS = [process.env.GEMINI_MODEL, 'gemini-flash-latest', 'gemini-3.5-flash-lite'].filter(Boolean);
+const MODELS = [process.env.GEMINI_MODEL, 'gemini-3.5-flash-lite', 'gemini-flash-latest'].filter(Boolean);
 const clip = (s, n) => String(s || '').slice(0, n);
 
 const corsFor = (request) => {
@@ -22,7 +22,10 @@ async function gemini(prompt, schema) {
   const key = process.env.GEMINI_API_KEY;
   let last = '';
   for (const model of MODELS) {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+    let res;
+    try {
+      res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+      signal: AbortSignal.timeout(20000),   // give up on a model after 20 seconds and try the next
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
       body: JSON.stringify({
@@ -30,12 +33,13 @@ async function gemini(prompt, schema) {
         generationConfig: { responseMimeType: 'application/json', responseSchema: schema, temperature: 0.3 },
       }),
     });
+    } catch (e) { last = `${model}: no answer (${e.name})`; continue; }
     if (res.ok) {
       const data = await res.json();
       return JSON.parse(data.candidates?.[0]?.content?.parts?.map((p) => p.text).join('') || '{}');
     }
-    last = `${model}: ${res.status}`;
-    if (res.status !== 404 && res.status !== 400) break;   // only try another model when this one doesn't exist
+    last = `${model}: ${res.status} ${(await res.text()).slice(0, 200)}`;
+    if (res.status === 401 || res.status === 403) break;   // a key problem: another model won't help
   }
   throw new Error(last);
 }
