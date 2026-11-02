@@ -37,6 +37,7 @@ async function fetchVia(url) {
   }
   if (!res) throw new Error('The site couldn’t be reached. Check your connection.');
   if (res.status === 404) throw new Error('This story wasn’t found. It may have been removed or made private.');
+  if (res.status === 400 && !ONLINE) throw new Error('The Mac’s relay is out of date. Stop serve.py in Terminal (Ctrl+C) and start it again.');
   if (!res.ok) throw new Error('The site couldn’t be reached right now. Try again in a minute.');
   return res.text();
 }
@@ -187,12 +188,15 @@ export function firstEpisode(story) {
 // since neither site can search for "this tag or that tag" at once.
 export async function search({ tags = [], kk = [], nr = [], order = 'popular' }) {
   const jobs = [];
+  let firstError = null;
+  const keep = (e) => { firstError = firstError || e; return []; };
   const words = tags.length ? tags : [''];
   for (const w of words) {
-    jobs.push(kkSearch({ query: w, genres: kk, order }).catch(() => []));
-    if (narouReady) jobs.push(nrSearch({ word: w, genres: nr, order: order === 'popular' ? 'hyoka' : 'weekly' }).catch(() => []));
+    jobs.push(kkSearch({ query: w, genres: kk, order }).catch(keep));
+    if (narouReady) jobs.push(nrSearch({ word: w, genres: nr, order: order === 'popular' ? 'hyoka' : 'weekly' }).catch(keep));
   }
   const lists = await Promise.all(jobs);
+  if (firstError && lists.every((l) => !l.length)) throw firstError;
   // Take turns between the result lists so both sites and every tag are represented.
   const seen = new Set(), out = [];
   for (let i = 0; lists.some((l) => i < l.length); i++) {

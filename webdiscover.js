@@ -133,7 +133,7 @@ export async function render() {
   if (key !== state.key) return load(key);
   root.innerHTML = chips() + (state.loading
     ? '<p class="hint d-loading">Finding stories…</p>'
-    : state.error ? `<p class="hint d-loading">${esc(state.error)}</p>`
+    : state.error ? `<p class="hint d-loading">${esc(state.error)}</p><p class="d-loading w-retry"><button class="btn" data-retry>Try again</button></p>`
     : !sorted().length ? '<p class="hint d-loading">Nothing matches. Try another mood or genre.</p>'
     : `<p class="hint w-status" id="wnStatus">${statusLine()}</p><ul class="d-list w-list">${sorted().map(row).join('')}</ul>`);
   if (!state.loading) queueFits();
@@ -276,6 +276,7 @@ export function init() {
       saveState();
       return render();
     }
+    if (e.target.closest('[data-retry]')) { state.key = ''; return render(); }
     const b = e.target.closest('[data-s]');
     if (b) openStory(b.dataset.s);
   });

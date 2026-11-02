@@ -481,3 +481,4 @@ button.add-book { border: 0; font-family: inherit; }
 .w-head { margin: 4px 0 18px; }
 .w-intro { font-family: var(--mincho); font-size: 15px; line-height: 1.8; margin: 0 0 20px; white-space: pre-line; display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; }
 .w-intro.open { display: block; }
+.w-retry { padding-top: 0; }
