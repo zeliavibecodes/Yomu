@@ -25,7 +25,8 @@ const GENRES = {
   horror: ['Horror', ['horror'], [305]],
   history: ['History', ['history'], [303]],
 };
-const MAX = 40;   // stories per list
+const MAX = 40;   // stories gathered per list
+const PAGE = 10;  // stories shown at a time
 
 const state = { mood: '', genre: '', length: '', stories: [], loading: false, key: '' };
 try { Object.assign(state, JSON.parse(localStorage.getItem('yomu.web') || '{}'), { stories: [], loading: false, key: '' }); } catch {}
@@ -103,15 +104,59 @@ function sorted() {
   return [...scored, ...list.filter((s) => !cachedFit(s))];
 }
 
+/* ---------- Making stories easy to judge at a glance ---------- */
+
+// Web novel titles often carry extras: 【書籍化】 notices, (Web版), and a long subtitle after 〜.
+export function shortTitle(t) {
+  let s = String(t || '').replace(/[【\[［][^】\]］]*[】\]］]/g, ' ').replace(/[（(](?:web|Web|WEB)[^）)]*[）)]/g, ' ');
+  s = s.replace(/[\s　]*[〜～~][^〜～~]*[〜～~]?[\s　]*$/, '').replace(/[\s　]*[―—－-]{1,2}[^―—－-]+[―—－-]{0,2}[\s　]*$/, '');
+  s = s.replace(/[\s　]+/g, ' ').trim();
+  return s.length >= 2 ? s : String(t || '').trim();
+}
+
+// The most common tags authors use, in plain English.
+const TAGS = {
+  '異世界転生': 'Reborn in another world', '異世界転移': 'Transported to another world', '転生': 'Reincarnation', '異世界': 'Another world',
+  '剣と魔法': 'Swords and magic', '魔法': 'Magic', '現代ファンタジー': 'Magic in modern times', '現代': 'Modern day', '現代日本': 'Modern Japan',
+  'ほのぼの': 'Gentle', '日常': 'Everyday life', 'スローライフ': 'Slow life', '癒し': 'Comforting', 'まったり': 'Relaxed',
+  'コメディ': 'Comedy', 'コメディー': 'Comedy', 'ギャグ': 'Gags', 'ラブコメ': 'Romantic comedy', '恋愛': 'Romance', '純愛': 'Pure love',
+  '両片思い': 'Mutual crush', 'じれじれ': 'Slow-burn romance', '青春': 'Youth', '学園': 'School', '学校': 'School', '高校生': 'High school',
+  '大学生': 'University', '社会人': 'Working adults', 'お仕事': 'Work life', '職業もの': 'Work life', '料理': 'Cooking', 'グルメ': 'Food',
+  '飯テロ': 'Food', 'ご飯': 'Food', '動物': 'Animals', '猫': 'Cats', '犬': 'Dogs', 'もふもふ': 'Fluffy animals', 'ペット': 'Pets',
+  '家族': 'Family', '子育て': 'Raising a child', '友情': 'Friendship', 'ヒューマンドラマ': 'Human drama', '感動': 'Moving', '切ない': 'Bittersweet',
+  'シリアス': 'Serious', 'ダーク': 'Dark', '復讐': 'Revenge', 'ざまぁ': 'Payback', '成り上がり': 'Rise to the top', '主人公最強': 'Overpowered hero',
+  'チート': 'Special powers', '無双': 'Unbeatable hero', '追放': 'Cast out', '勘違い': 'Misunderstandings', '悪役令嬢': 'Villainess',
+  '悪役転生': 'Reborn as the villain', '婚約破棄': 'Broken engagement', '聖女': 'Saint', '貴族': 'Nobility', '王子': 'Prince', '王女': 'Princess',
+  '冒険': 'Adventure', '冒険者': 'Adventurers', 'ダンジョン': 'Dungeons', 'ゲーム': 'Game world', 'VRMMO': 'VR game', 'ステータス': 'Game stats',
+  'スキル': 'Skills', '魔王': 'Demon lord', '勇者': 'Hero', '戦記': 'War story', '戦争': 'War', 'バトル': 'Battles', 'アクション': 'Action',
+  '宇宙': 'Space', 'SF': 'Sci-fi', 'ロボット': 'Robots', 'AI': 'AI', 'タイムリープ': 'Time loop', 'タイムトラベル': 'Time travel', '近未来': 'Near future',
+  '歴史': 'History', '戦国': 'Samurai era', '江戸': 'Edo period', 'ミステリー': 'Mystery', '推理': 'Detective', '謎解き': 'Puzzles',
+  'サスペンス': 'Suspense', 'ホラー': 'Horror', '怪談': 'Ghost stories', 'オカルト': 'Occult', '妖怪': 'Yokai', '神様': 'Gods', '幽霊': 'Ghosts',
+  '吸血鬼': 'Vampires', 'ハーレム': 'Harem', '百合': 'Girls’ love', 'BL': 'Boys’ love', '幼馴染': 'Childhood friends', 'ヤンデレ': 'Obsessive love',
+  '女主人公': 'Female lead', '男主人公': 'Male lead', 'おっさん': 'Middle-aged hero', '内政': 'Running a kingdom', '領地経営': 'Running an estate',
+  '商売': 'Running a shop', '錬金術': 'Alchemy', '薬師': 'Herbalist', '医療': 'Medicine', '農業': 'Farming', '生産': 'Crafting', '旅': 'Travel',
+  '温泉': 'Hot springs', '田舎': 'Countryside', '喫茶店': 'Café', 'カフェ': 'Café', '本': 'Books', '書店': 'Bookshop', '音楽': 'Music',
+  'スポーツ': 'Sports', '部活': 'School clubs', '探偵': 'Detective', '警察': 'Police', '刑事': 'Detective', '短編': 'Short story', 'エッセイ': 'Essay',
+};
+function topics(s) {
+  let list = [...new Set(s.tags.map((t) => TAGS[t]).filter(Boolean))];
+  // "Another world" adds nothing next to "Reborn in another world" and the like.
+  if (list.some((x) => /another world/.test(x) && x !== 'Another world')) list = list.filter((x) => x !== 'Another world');
+  return list.slice(0, 3);
+}
+const status = (s) => (s.short ? 'Short story' : s.finished ? 'Finished' : 'Ongoing');
+
+function diffHtml(f) {
+  return f ? `<span class="w-lv">${level(f.pct)}</span><span class="w-bar"><b style="width:${f.pct}%"></b></span><span class="w-pct">${f.pct}%</span>`
+    : '<span class="w-lv w-wait">Checking…</span>';
+}
 function row(s) {
-  const f = cachedFit(s);
-  const meta = [s.genre, timeLabel(s.chars), s.short ? 'Short story' : s.finished ? 'Finished' : 'Ongoing'].filter(Boolean).join(' · ');
-  return `<li><button data-s="${esc(fitId(s))}">
-    <span class="lt">${esc(s.title)}</span>
-    ${s.pitch ? `<span class="wp">${esc(s.pitch)}</span>` : ''}
-    <span class="la">${esc(s.author)} · ${SITES[s.site]}</span>
-    <span class="lm">${esc(meta)}</span>
-    <span class="fit w-fit" ${f ? '' : 'hidden'}><i><b style="width:${f?.pct || 0}%"></b></i><span>${f ? `${f.pct}% · ${level(f.pct)}` : ''}</span></span>
+  const t = topics(s);
+  return `<li><button class="w-card" data-s="${esc(fitId(s))}">
+    <span class="w-diff">${Y().settings.key ? diffHtml(cachedFit(s)) : ''}</span>
+    <span class="w-title">${esc(shortTitle(s.title))}</span>
+    ${t.length ? `<span class="w-topics">${t.map((x) => `<span>${esc(x)}</span>`).join('')}</span>` : ''}
+    <span class="w-meta">${esc([s.genre, timeLabel(s.chars), status(s)].filter(Boolean).join(' · '))}</span>
   </button></li>`;
 }
 
@@ -119,7 +164,7 @@ function statusLine() {
   if (!Y().settings.key) return 'Add your jpdb key in Settings to see how hard each story is for you.';
   const list = state.stories.filter(lengthOk);
   const left = list.filter((s) => !cachedFit(s)).length;
-  if (left) return `Checking how many words you know in each story… ${list.length - left} of ${list.length}`;
+  if (left) return `Checking how hard each story is for you… ${list.length - left} of ${list.length}`;
   return 'Easiest for you first';
 }
 
@@ -135,12 +180,14 @@ export async function render() {
     ? '<p class="hint d-loading">Finding stories…</p>'
     : state.error ? `<p class="hint d-loading">${esc(state.error)}</p><p class="d-loading w-retry"><button class="btn" data-retry>Try again</button></p>`
     : !sorted().length ? '<p class="hint d-loading">Nothing matches. Try another mood or genre.</p>'
-    : `<p class="hint w-status" id="wnStatus">${statusLine()}</p><ul class="d-list w-list">${sorted().map(row).join('')}</ul>`);
+    : `<p class="hint w-status" id="wnStatus">${statusLine()}</p><ul class="w-list">${sorted().slice(0, state.shown).map(row).join('')}</ul>`
+      + (sorted().length > state.shown ? '<p class="w-more"><button class="btn" data-more>Show more</button></p>' : ''));
   if (!state.loading) queueFits();
 }
 
 async function load(key) {
   state.key = key;
+  state.shown = PAGE;
   state.loading = true;
   state.error = '';
   render();
@@ -181,11 +228,7 @@ function refreshRow(s) {
   const st = $('wnStatus');
   if (st) st.textContent = statusLine();
   if (!f) return;
-  document.querySelectorAll(`.w-list [data-s="${CSS.escape(fitId(s))}"] .w-fit`).forEach((el) => {
-    el.hidden = false;
-    el.querySelector('b').style.width = f.pct + '%';
-    el.querySelector('span').textContent = `${f.pct}% · ${level(f.pct)}`;
-  });
+  document.querySelectorAll(`.w-list [data-s="${CSS.escape(fitId(s))}"] .w-diff`).forEach((el) => { el.innerHTML = diffHtml(f); });
 }
 
 /* ---------- Story details ---------- */
@@ -212,16 +255,19 @@ async function openStory(id) {
   if (!s) return;
   current = s;
   const inLib = await Y().findWebBook(s.site, s.id);
-  const tags = [s.genre, timeLabel(s.chars), s.short ? 'Short story' : `${s.count} episodes`, s.short ? '' : s.finished ? 'Finished' : 'Ongoing', SITES[s.site]].filter(Boolean);
+  const tags = [s.genre, timeLabel(s.chars), s.short ? '' : `${s.count} episodes`, status(s), SITES[s.site]].filter(Boolean);
+  const short = shortTitle(s.title), t = topics(s);
   $('dDetail').innerHTML = `
     <div class="w-head">
-      <div class="dt">${esc(s.title)}</div>
-      ${s.pitch ? `<div class="de">${esc(s.pitch)}</div>` : ''}
+      <div class="dt">${esc(short)}</div>
+      ${short !== s.title.trim() ? `<div class="w-full">${esc(s.title)}</div>` : ''}
       <div class="da">${esc(s.author)}</div>
-      <div class="tags">${tags.map((t) => `<span class="tag">${esc(t)}</span>`).join('')}</div>
+      ${t.length ? `<div class="w-topics w-topics-lg">${t.map((x) => `<span>${esc(x)}</span>`).join('')}</div>` : ''}
+      <div class="tags">${tags.map((x) => `<span class="tag">${esc(x)}</span>`).join('')}</div>
     </div>
     <div class="fitbox" id="wnFit">${fitHtml(s)}</div>
-    ${s.intro ? `<p class="lbl">About</p><p class="w-intro" id="wnIntro">${esc(s.intro.trim())}</p>` : ''}
+    ${s.pitch ? `<p class="lbl">In one line</p><p class="w-pitch">${esc(s.pitch)}</p>` : ''}
+    ${s.intro ? `<p class="lbl">About</p><p class="w-intro" id="wnIntro">${esc(s.intro.replace(/[ \t　]+\n/g, '\n').replace(/\n{2,}/g, '\n').trim())}</p>` : ''}
     <p class="lbl">Opening lines</p>
     <div class="first" id="wnFirst"><span class="hint">Loading…</span></div>
     <div class="acts">
@@ -277,6 +323,7 @@ export function init() {
       return render();
     }
     if (e.target.closest('[data-retry]')) { state.key = ''; return render(); }
+    if (e.target.closest('[data-more]')) { state.shown += PAGE; return render(); }
     const b = e.target.closest('[data-s]');
     if (b) openStory(b.dataset.s);
   });

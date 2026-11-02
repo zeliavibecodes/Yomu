@@ -472,12 +472,26 @@ button.add-book { border: 0; font-family: inherit; }
 .w-lbl { font-size: 13px; font-weight: 600; color: var(--muted); margin: 0 0 8px 2px; }
 .w-chips { margin-bottom: 16px; }
 .w-chips:last-of-type { margin-bottom: 22px; }
-.w-status { margin: 0 2px 4px; }
-.w-list .wp { font-size: 13px; color: var(--ink-2); line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.w-list .lt { line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.w-list .la { margin-top: 2px; }
-.w-fit { margin-top: 4px; }
-.w-fit i { width: 40px; }
+.w-status { margin: 0 2px 6px; }
+.w-list { list-style: none; margin: 0; padding: 0; }
+.w-card { width: 100%; text-align: left; background: none; border: 0; border-bottom: 0.5px solid var(--hair); padding: 20px 2px 22px; display: grid; gap: 8px; color: var(--ink); }
+.w-list li:last-child .w-card { border-bottom: 0; }
+.w-card:active { opacity: 0.6; }
+.w-diff { display: flex; align-items: center; gap: 10px; min-height: 20px; }
+.w-lv { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
+.w-lv.w-wait { font-weight: 500; color: var(--muted); }
+.w-bar { flex: 0 0 72px; height: 4px; border-radius: 2px; background: var(--fill-strong); overflow: hidden; }
+.w-bar b { display: block; height: 100%; background: var(--ink); }
+.w-pct { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.w-title { font-family: var(--mincho); font-size: 20px; font-weight: 600; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.w-topics { display: flex; flex-wrap: wrap; gap: 6px; }
+.w-topics span { font-size: 13px; font-weight: 500; padding: 4px 10px; border-radius: 999px; background: var(--fill); color: var(--ink-2); }
+.w-meta { font-size: 14px; color: var(--muted); }
+.w-more { text-align: center; margin: 18px 0 8px; }
+.w-more .btn { min-width: 160px; }
+.w-full { font-family: var(--mincho); font-size: 14px; color: var(--muted); line-height: 1.6; margin: 0 0 6px; }
+.w-topics-lg { margin: 10px 0 2px; }
+.w-pitch { font-family: var(--mincho); font-size: 16px; line-height: 1.7; margin: 0 0 20px; }
 .w-head { margin: 4px 0 18px; }
 .w-intro { font-family: var(--mincho); font-size: 15px; line-height: 1.8; margin: 0 0 20px; white-space: pre-line; display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; }
 .w-intro.open { display: block; }
