@@ -55,6 +55,19 @@ Switch from **Library** to **Discover** at the top of the first screen to find f
 - **Tap a book** to see its English title, a short plot summary in English (for about 380 of the most-read works), the opening lines, and how many of its words you already know on jpdb. Then add it to your library in one tap.
 - Reading times use your own reading speed, so they get more accurate as you read.
 
+## Kakuyomu
+
+Tap **Add book → Story from Kakuyomu** and paste a story's link from kakuyomu.jp (カクヨム), a free site for modern web novels.
+
+- Yomu downloads the first 10 episodes. At the end of the last one, **Get the next 10 episodes** fetches more. For stories still being written, **Check for new episodes** picks up new ones.
+- Episodes are downloaded slowly, one at a time, and kept only on your phone, for your own reading. Nothing is saved to GitHub.
+- The author's own readings and emphasis dots are kept.
+- Kakuyomu doesn't let other websites read its pages, so Yomu goes through a small relay: `serve.py` on the Mac, or a free Cloudflare Worker online (see `relay/README.md`).
+
+## Testing on the Mac
+
+In Terminal, from the yomu folder, run `python3 serve.py`, then open the address it prints on your iPhone (same Wi-Fi).
+
 ## Progress
 
 The bottom of each page shows how far you are through the whole book and roughly how many minutes are left in the chapter. The time adjusts to how fast you actually read.
@@ -81,4 +94,4 @@ Claude saves changes straight to this GitHub repository. The app picks them up t
 
 ## Credits
 
-Dictionary data from JMdict by the Electronic Dictionary Research and Development Group (CC BY-SA 4.0). Word splitting by kuromoji.js with the IPADIC dictionary (Apache 2.0). Readings and decks by jpdb.io. Books from Aozora Bunko, fetched through the aozorahack copy on GitHub.
+Dictionary data from JMdict by the Electronic Dictionary Research and Development Group (CC BY-SA 4.0). Word splitting by kuromoji.js with the IPADIC dictionary (Apache 2.0). Readings and decks by jpdb.io. Books from Aozora Bunko, fetched through the aozorahack copy on GitHub. Stories from Kakuyomu belong to their authors.

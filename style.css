@@ -454,3 +454,13 @@ select {
   box-shadow: 0 10px 30px -10px rgba(0,0,0,0.4);
   animation: rise 0.25s cubic-bezier(.2,.8,.2,1);
 }
+
+/* Add book sheet */
+button.add-book { border: 0; font-family: inherit; }
+.add-file { position: relative; display: flex; align-items: center; justify-content: center; width: 100%; margin-bottom: 26px; }
+.add-file input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.add-file:focus-within { outline: 2px solid var(--ink); outline-offset: 3px; }
+.add-kk { margin-bottom: 0; }
+.add-kk .sheet-msg { text-align: left; margin: 10px 2px 0; }
+.chapter-end .more { writing-mode: horizontal-tb; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.chapter-end .more .hint { text-align: center; }

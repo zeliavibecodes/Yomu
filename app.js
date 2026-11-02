@@ -990,7 +990,10 @@ async function buildChapter(index, { images = true } = {}) {
   // Footer: next chapter
   const end = document.createElement('div');
   end.className = 'chapter-end';
+  const kk = reader.book.kakuyomu;
   if (index < reader.epub.spine.length - 1) end.innerHTML = '<button class="btn" id="nextChapter">Next chapter</button>';
+  else if (kk && kk.have < kk.total) end.innerHTML = `<div class="more"><button class="btn" id="moreEpisodes">Get the next ${Math.min(10, kk.total - kk.have)} episodes</button><p class="hint" id="moreMsg">${kk.total - kk.have} more on Kakuyomu</p></div>`;
+  else if (kk && !kk.finished) end.innerHTML = '<div class="more"><button class="btn" id="moreEpisodes">Check for new episodes</button><p class="hint" id="moreMsg">The author is still writing this story.</p></div>';
   else end.innerHTML = '<span class="hint">End of the book</span>';
   root.appendChild(end);
 
@@ -1417,6 +1420,7 @@ function tapZone(x) {
 }
 // Library and Discover share the first screen; the large title switches between them.
 let discoverMod = null;
+let kakuyomuMod = null;
 async function showTab(tab) {
   const disc = tab === 'discover';
   $('libraryView').hidden = disc;
@@ -1480,6 +1484,41 @@ async function addBookBuffer(buf, extra = {}) {
   renderShelf();
   return id;
 }
+async function findKakuyomuBook(workId) {
+  const books = await db.all('books');
+  return books.find((b) => b.kakuyomu?.work === workId)?.id || null;
+}
+
+// Download the next episodes of the Kakuyomu story that's open, then carry on reading.
+async function moreEpisodes() {
+  const btn = $('moreEpisodes'), say = (t) => { const m = $('moreMsg'); if (m) m.textContent = t; };
+  if (!btn || btn.disabled) return;
+  btn.disabled = true;
+  const rec = reader.book, at = reader.chapter;
+  try {
+    const kk = await import('./kakuyomu.js');
+    const res = await kk.getMore(rec, await db.get('files', rec.id), say);
+    if (!res.added) {
+      await db.put('books', res.rec);
+      reader.book = res.rec;
+      say(res.rec.kakuyomu.finished ? 'This is the end of the story.' : 'No new episodes yet.');
+      btn.disabled = false;
+      return;
+    }
+    const epub = await openEpub(res.buf);
+    await db.put('files', res.buf, rec.id);
+    const updated = { ...res.rec, chapters: epub.spine.length, lengths: await chapterLengths(epub) };
+    await db.put('books', updated);
+    if (reader.book?.id !== rec.id) return;   // the reader was closed meanwhile
+    reader.book = updated;
+    reader.epub = epub;
+    await loadChapter(at + 1);
+  } catch (e) {
+    say(e.message || 'The episodes couldn’t be downloaded.');
+    btn.disabled = false;
+  }
+}
+
 async function findAozoraBook(aozoraId) {
   const books = await db.all('books');
   return books.find((b) => b.aozora === aozoraId)?.id || null;
@@ -1537,7 +1576,12 @@ function init() {
   $('keyInput').value = settings.key;
   try { const d = JSON.parse(localStorage.getItem('yomu.decks') || '[]'); if (d.length) fillDecks(d); } catch {}
 
-  $('fileInput').addEventListener('change', (e) => { addBookFile(e.target.files[0]); e.target.value = ''; });
+  $('fileInput').addEventListener('change', (e) => { closeSheet(); addBookFile(e.target.files[0]); e.target.value = ''; });
+  $('addBookBtn').addEventListener('click', async () => {
+    if (!kakuyomuMod) { kakuyomuMod = await import('./kakuyomu.js'); kakuyomuMod.init(); }
+    kakuyomuMod.resetSheet();
+    openSheet('addSheet');
+  });
   $('editBtn').addEventListener('click', () => { editing = !editing; renderShelf(); });
   $('tabLibrary').addEventListener('click', () => showTab('library'));
   $('tabDiscover').addEventListener('click', () => showTab('discover'));
@@ -1593,6 +1637,7 @@ function init() {
 
   $('text').addEventListener('click', (e) => {
     if (e.target.closest('#nextChapter')) return loadChapter(reader.chapter + 1);
+    if (e.target.closest('#moreEpisodes')) return moreEpisodes();
     const link = e.target.closest('[data-target]');
     if (link) {
       const t = link.dataset.target;
@@ -1670,7 +1715,7 @@ function init() {
 // Shared with the Discover screen (discover.js).
 window.yomu = {
   get settings() { return settings; }, speed, vocab, parseTexts, toast, openSheet, closeSheet,
-  addBookBuffer, findAozoraBook, openBook,
+  addBookBuffer, findAozoraBook, findKakuyomuBook, openBook,
 };
 
 init();
