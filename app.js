@@ -1,4 +1,8 @@
 // Yomu — a Japanese EPUB reader with jpdb readings and deck saving.
+
+// The app's version (from app.js?v=… in index.html). Added to every file the app loads,
+// so phones always get matching, up-to-date files instead of old saved copies.
+const V = new URL(import.meta.url).search;
 // Everything runs on the phone. The only network calls go to jpdb.io.
 
 const $ = (id) => document.getElementById(id);
@@ -1060,7 +1064,7 @@ async function loadChapter(index, { block = 0, frag = '', page: pageArg = null, 
    Offline dictionary (fallback)
    ========================================================= */
 const dict = { available: false, mod: null };
-async function dictModule() { return dict.mod || (dict.mod = await import('./offline-dict.js')); }
+async function dictModule() { return dict.mod || (dict.mod = await import(`./offline-dict.js${V}`)); }
 async function refreshDictState() {
   try { dict.available = await (await dictModule()).isDownloaded(); } catch { dict.available = false; }
   showDictState();
@@ -1430,7 +1434,7 @@ async function showTab(tab) {
   $('editBtn').hidden = disc || !$('shelf').children.length;
   try { localStorage.setItem('yomu.tab', tab); } catch {}
   if (disc) {
-    if (!discoverMod) { discoverMod = await import('./discover.js'); discoverMod.init(); }
+    if (!discoverMod) { discoverMod = await import(`./discover.js${V}`); discoverMod.init(); }
     discoverMod.render();
   }
 }
@@ -1496,7 +1500,7 @@ async function moreEpisodes() {
   btn.disabled = true;
   const rec = reader.book, at = reader.chapter;
   try {
-    const kk = await import('./webnovel.js');
+    const kk = await import(`./webnovel.js${V}`);
     const res = await kk.getMore(rec, await db.get('files', rec.id), say);
     if (!res.added) {
       await db.put('books', res.rec);
@@ -1578,7 +1582,7 @@ function init() {
 
   $('fileInput').addEventListener('change', (e) => { closeSheet(); addBookFile(e.target.files[0]); e.target.value = ''; });
   $('addBookBtn').addEventListener('click', async () => {
-    if (!webMod) { webMod = await import('./webnovel.js'); webMod.init(); }
+    if (!webMod) { webMod = await import(`./webnovel.js${V}`); webMod.init(); }
     webMod.resetSheet();
     openSheet('addSheet');
   });

@@ -1,7 +1,8 @@
 // Discover → Web novels: browse Kakuyomu and Narou by mood and genre, with each
 // story's difficulty measured against your own jpdb words.
 
-import { search, firstEpisode, addStory, SITES } from './webnovel.js';
+// Loaded with the same version as the rest of the app, so there's only ever one copy of it.
+const { search, firstEpisode, addStory, SITES } = await import(`./webnovel.js${new URL(import.meta.url).search}`);
 
 const Y = () => window.yomu;
 const $ = (id) => document.getElementById(id);

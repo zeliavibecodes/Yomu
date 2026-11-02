@@ -57,7 +57,7 @@ export async function render() {
   $('aozoraView').hidden = source !== 'aozora';
   $('webView').hidden = source !== 'web';
   if (source === 'web') {
-    if (!webMod) { webMod = await import('./webdiscover.js'); webMod.init(); }
+    if (!webMod) { webMod = await import(`./webdiscover.js${new URL(import.meta.url).search}`); webMod.init(); }
     return webMod.render();
   }
   const root = $('discoverBody');

@@ -466,7 +466,9 @@ button.add-book { border: 0; font-family: inherit; }
 .chapter-end .more .hint { text-align: center; }
 
 /* Discover: classics or web novels */
-.d-src { margin-bottom: 18px; }
+.d-src { display: flex; gap: 20px; margin: 0 2px 16px; border-bottom: 0.5px solid var(--hair); }
+.d-src button { background: none; border: 0; padding: 4px 0 10px; margin-bottom: -0.5px; font-size: 15px; font-weight: 500; color: var(--muted); border-bottom: 2px solid transparent; }
+.d-src button.on { color: var(--ink); font-weight: 600; border-bottom-color: var(--ink); }
 .w-lbl { font-size: 13px; font-weight: 600; color: var(--muted); margin: 0 0 8px 2px; }
 .w-chips { margin-bottom: 16px; }
 .w-chips:last-of-type { margin-bottom: 22px; }
