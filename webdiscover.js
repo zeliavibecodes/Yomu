@@ -2,7 +2,7 @@
 // story's difficulty measured against your own jpdb words.
 
 // Loaded with the same version as the rest of the app, so there's only ever one copy of it.
-const { search, firstEpisode, addStory, SITES } = await import(`./webnovel.js${new URL(import.meta.url).search}`);
+const { search, firstEpisode, addStory, SITES, relayReady } = await import(`./webnovel.js${new URL(import.meta.url).search}`);
 
 const Y = () => window.yomu;
 const $ = (id) => document.getElementById(id);
@@ -125,6 +125,10 @@ function statusLine() {
 
 export async function render() {
   const root = $('webBody');
+  if (!relayReady) {
+    root.innerHTML = '<p class="hint d-loading">Web novels work in the Mac version for now. The online version needs its relay set up first.</p>';
+    return;
+  }
   const key = [state.mood, state.genre].join('|');
   if (key !== state.key) return load(key);
   root.innerHTML = chips() + (state.loading

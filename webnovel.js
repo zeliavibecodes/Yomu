@@ -17,6 +17,7 @@ const BATCH = 10;        // episodes per download
 const GAP = 1200;        // wait between episode pages, to keep the load on the sites light
 
 export const SITES = { kakuyomu: 'Kakuyomu', narou: 'Narou' };
+export const relayReady = !!RELAY;
 
 /* ---------- Fetching through the relay ---------- */
 
