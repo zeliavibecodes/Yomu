@@ -15,7 +15,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const ONLINE = /github\.io$/.test(location.hostname);
 const ONLINE_RELAY = 'https://yomu-vercel.vercel.app/api/relay';
 const NAROU_EPISODE_RELAY = '';
-const RELAY = ONLINE ? ONLINE_RELAY : 'relay';
+const RELAY = ONLINE ? ONLINE_RELAY : 'web-relay';   // on the Mac, served by serve.py
 const relayFor = (url) => (ONLINE && /^https:\/\/ncode\.syosetu\.com\//.test(url) ? NAROU_EPISODE_RELAY : RELAY);
 export const narouReady = !ONLINE || !!NAROU_EPISODE_RELAY;
 const BATCH = 10;        // episodes per download
@@ -36,6 +36,7 @@ async function fetchVia(url) {
     if (res.ok || res.status < 500) break;
   }
   if (!res) throw new Error('The site couldn’t be reached. Check your connection.');
+  if (res.status === 404 && !ONLINE && relay === RELAY && res.headers.get('X-Yomu-Relay') !== '1') throw new Error('Web novels need Yomu started with serve.py. In Terminal, in the yomu folder, run: python3 serve.py');
   if (res.status === 404) throw new Error('This story wasn’t found. It may have been removed or made private.');
   if (res.status === 400 && !ONLINE) throw new Error('The Mac’s relay is out of date. Stop serve.py in Terminal (Ctrl+C) and start it again.');
   if (!res.ok) throw new Error('The site couldn’t be reached right now. Try again in a minute.');

@@ -4,8 +4,8 @@
 Run it from the yomu folder:   python3 serve.py
 Then open the address it prints on the iPhone.
 
-Besides the app's files, it passes on Kakuyomu and Narou pages at /relay, the same
-way the online relay does (relay/worker.js), so web novels work locally.
+Besides the app's files, it passes on Kakuyomu and Narou pages at /web-relay, the same
+way the online relay does (relay/vercel), so web novels work locally.
 """
 import http.server, re, socket, socketserver, sys, urllib.error, urllib.parse, urllib.request
 
@@ -23,7 +23,7 @@ AGENT = "Yomu personal reader (one reader, one episode at a time)"
 class Handler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         url = urllib.parse.urlparse(self.path)
-        if url.path.rstrip("/").endswith("/relay"):
+        if url.path.rstrip("/").endswith("/web-relay"):
             return self.relay(urllib.parse.parse_qs(url.query).get("url", [""])[0])
         return super().do_GET()
 
@@ -35,10 +35,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             with urllib.request.urlopen(req, timeout=20) as r:
                 body = r.read()
         except urllib.error.HTTPError as e:
-            return self.send_error(e.code)
+            self.send_response(e.code)
+            self.send_header("X-Yomu-Relay", "1")
+            self.end_headers()
+            return
         except Exception:
             return self.send_error(502)
         self.send_response(200)
+        self.send_header("X-Yomu-Relay", "1")
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
@@ -46,7 +50,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def end_headers(self):
         # Always load the newest files while testing.
-        if not self.path.startswith("/relay"):
+        if not self.path.startswith("/web-relay"):
             self.send_header("Cache-Control", "no-cache")
         super().end_headers()
 
