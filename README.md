@@ -61,6 +61,10 @@ Discover has two parts: **Classics** (Aozora Bunko) and **Web novels**, from Kak
 
 - **Pick a mood, a genre, or both.** Moods come from the tags authors put on their stories: Gentle, Funny, Moving, Gripping. "Gentle + Sci-fi" finds soft sci-fi; "Funny + Fantasy" finds comedic fantasy.
 - **Easiest for you first.** Yomu checks each story's first episode against your jpdb words and shows how many you already know: Comfortable (90% or more), A stretch (80–89%), or Hard. Scores are rechecked every two weeks, as your decks grow.
+- **For you** recommends stories from three things together: how easy each is for you, how well it matches what you like, and how much other readers like it. What you like is learned from the stories you save (counts most), add to your library (counts most), and the moods and genres you browse. Each pick says which of your interests it matches.
+- **Saved:** tap the bookmark on any story, or **Save for later** on its details page, to keep it in the Saved list. Saved stories stay on this phone.
+- **Reader signals:** each card shows how much readers like the story (Loved by many, Popular, Liked, Some readers, Few readers yet), and the details page shows ratings, followers and translated reader reviews.
+- **English:** with a Gemini key on the Vercel relay, cards show an English title and one-line description, and the details page an English summary.
 - **Add a story** from its details, or paste a link under **Add book → Web novel link**. Yomu downloads the first 10 episodes, then more whenever you reach the end.
 - Episodes are downloaded slowly, one at a time, and kept only on your phone, for your own reading. Nothing is saved to GitHub.
 - The authors' own readings and emphasis dots are kept.

@@ -28,9 +28,9 @@ const GENRES = {
 const MAX = 40;   // stories gathered per list
 const PAGE = 10;  // stories shown at a time
 
-const state = { mood: '', genre: '', length: '', sort: 'easy', stories: [], loading: false, key: '' };
+const state = { view: 'foryou', mood: '', genre: '', length: '', sort: 'easy', stories: [], loading: false, key: '' };
 try { Object.assign(state, JSON.parse(localStorage.getItem('yomu.web') || '{}'), { stories: [], loading: false, key: '' }); } catch {}
-const saveState = () => { try { localStorage.setItem('yomu.web', JSON.stringify({ mood: state.mood, genre: state.genre, length: state.length, sort: state.sort })); } catch {} };
+const saveState = () => { try { localStorage.setItem('yomu.web', JSON.stringify({ view: state.view, mood: state.mood, genre: state.genre, length: state.length, sort: state.sort })); } catch {} };
 
 /* ---------- Reading time and difficulty ---------- */
 
@@ -85,7 +85,71 @@ function computeFit(s) {
   return job;
 }
 
+/* ---------- Saved stories ---------- */
+
+const SAVED_KEY = 'yomu.saved';
+const savedAll = () => { try { return JSON.parse(localStorage.getItem(SAVED_KEY) || '{}'); } catch { return {}; } };
+const isSaved = (s) => !!savedAll()[fitId(s)];
+function toggleSaved(s) {
+  const all = savedAll();
+  if (all[fitId(s)]) delete all[fitId(s)];
+  else { all[fitId(s)] = { ...s, savedAt: Date.now() }; addInterest(s, 2); }
+  try { localStorage.setItem(SAVED_KEY, JSON.stringify(all)); } catch {}
+  return !!all[fitId(s)];
+}
+const savedList = () => Object.values(savedAll()).sort((a, b) => b.savedAt - a.savedAt);
+
+/* ---------- What you like ---------- */
+
+// Built from the stories you save (counts 2) and add to your library (counts 3), and the
+// moods and genres you browse (counts 1). Only tags Yomu can name in English are counted.
+const INTEREST_KEY = 'yomu.interests';
+const GENRE_OF = { 'Other-world fantasy': 'fantasy', 'Modern fantasy': 'fantasy', 'High fantasy': 'fantasy', 'Action': 'fantasy', 'Sci-fi': 'scifi', 'Space': 'scifi', 'VR game': 'scifi', 'Disaster': 'scifi', 'Romance': 'romance', 'Romantic comedy': 'romance', 'Other-world romance': 'romance', 'Drama': 'drama', 'Literary': 'drama', 'Mystery': 'mystery', 'Horror': 'horror', 'History': 'history' };
+const interests = () => { try { return { tags: {}, genres: {}, ...JSON.parse(localStorage.getItem(INTEREST_KEY) || '{}') }; } catch { return { tags: {}, genres: {} }; } };
+function bump(change) {
+  const p = interests();
+  for (const [t, w] of Object.entries(change.tags || {})) p.tags[t] = (p.tags[t] || 0) + w;
+  for (const [g, w] of Object.entries(change.genres || {})) p.genres[g] = (p.genres[g] || 0) + w;
+  try { localStorage.setItem(INTEREST_KEY, JSON.stringify(p)); } catch {}
+}
+function addInterest(s, w) {
+  const tags = {};
+  for (const t of s.tags || []) if (TAGS[t]) tags[t] = w;
+  bump({ tags, genres: GENRE_OF[s.genre] ? { [GENRE_OF[s.genre]]: w } : {} });
+}
+const topOf = (obj, n) => Object.entries(obj).sort((a, b) => b[1] - a[1]).slice(0, n).map((x) => x[0]);
+const hasInterests = () => Object.keys(interests().tags).length > 0;
+
+// How well a story matches what you like, from 0 to 1, and the tags that matched.
+function interestMatch(s) {
+  const p = interests();
+  const top = Object.values(p.tags).sort((a, b) => b - a).slice(0, 4).reduce((a, b) => a + b, 0);
+  if (!top) return { score: 0.5, tags: [] };
+  const hits = [...new Set(s.tags || [])].filter((t) => p.tags[t]).sort((a, b) => p.tags[b] - p.tags[a]);
+  const raw = hits.reduce((a, t) => a + p.tags[t], 0) + (p.genres[GENRE_OF[s.genre]] || 0) * 0.5;
+  return { score: Math.min(1, raw / top), tags: hits };
+}
+// The recommendation: how easy it is for you, how well it matches your interests, and how much readers like it.
+function recScore(s) {
+  const f = cachedFit(s);
+  const ease = f ? Math.max(0, Math.min(1, (f.pct - 65) / 30)) : 0.4;
+  const love = Math.max(0, Math.min(1, Math.log10(loveScore(s) + 1) / 4.3));
+  return 0.45 * ease + 0.35 * interestMatch(s).score + 0.2 * love;
+}
+function whyHtml(s) {
+  // Difficulty and reader labels are already on the card, so this only says which interests matched.
+  const m = [...new Set(interestMatch(s).tags.map((t) => TAGS[t]).filter(Boolean))].slice(0, 2);
+  return m.length ? `<span class="w-why">Because you like ${esc(m.join(' and ').toLowerCase())}</span>` : '';
+}
+
 /* ---------- The list ---------- */
+
+const VIEWS = [['foryou', 'For you'], ['browse', 'Browse'], ['saved', 'Saved']];
+function viewTabs() {
+  const n = Object.keys(savedAll()).length;
+  return `<div class="w-views" role="tablist">${VIEWS.map(([k, l]) => `<button role="tab" class="${state.view === k ? 'on' : ''}" data-view="${k}">${l}${k === 'saved' && n ? ` <span>${n}</span>` : ''}</button>`).join('')}</div>`;
+}
+
 
 function chips() {
   const row = (group, items, current) => items.map(([k, label]) => `<button class="chip${current === k ? ' on' : ''}" data-${group}="${k}">${label}</button>`).join('');
@@ -110,6 +174,8 @@ const compact = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(n >= 1e7 ? 0 : 1)}M` : n
 const lengthOk = (s) => !state.length || (state.length === 'short' ? minutes(s.chars) <= SHORT : minutes(s.chars) > SHORT);
 
 function sorted() {
+  if (state.view === 'saved') return state.stories;
+  if (state.view === 'foryou') return [...state.stories].sort((a, b) => recScore(b) - recScore(a));
   const list = state.stories.filter(lengthOk);
   if (state.sort === 'loved') return [...list].sort((a, b) => loveScore(b) - loveScore(a));
   if (!Y().settings.key) return list;
@@ -122,7 +188,7 @@ function sorted() {
 
 // Web novel titles often carry extras: 【書籍化】 notices, (Web版), and a long subtitle after 〜.
 export function shortTitle(t) {
-  let s = String(t || '').replace(/[【\[［][^】\]］]*[】\]］]/g, ' ').replace(/[（(](?:web|Web|WEB)[^）)]*[）)]/g, ' ');
+  let s = String(t || '').replace(/[【\[［][^】\]］]*[】\]］]/g, ' ').replace(/[（(]\s*(?:web|ｗｅｂ)[^）)]*[）)]/gi, ' ');
   s = s.replace(/[\s　]*[〜～~][^〜～~]*[〜～~]?[\s　]*$/, '').replace(/[\s　]*[―—－-]{1,2}[^―—－-]+[―—－-]{0,2}[\s　]*$/, '');
   s = s.replace(/[\s　]+/g, ' ').trim();
   return s.length >= 2 ? s : String(t || '').trim();
@@ -206,9 +272,13 @@ async function fillEnglish() {
   }
 }
 
+const BOOKMARK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 3.5h11a1 1 0 0 1 1 1v16l-6.5-4.5-6.5 4.5v-16a1 1 0 0 1 1-1z"/></svg>';
+const saveBtn = (s) => `<button class="w-save${isSaved(s) ? ' on' : ''}" data-save="${esc(fitId(s))}" aria-label="${isSaved(s) ? 'Remove from saved' : 'Save'}" aria-pressed="${isSaved(s)}">${BOOKMARK}</button>`;
+
 function row(s) {
   const t = topics(s);
-  return `<li><button class="w-card" data-s="${esc(fitId(s))}">
+  return `<li class="w-item">${saveBtn(s)}<button class="w-card" data-s="${esc(fitId(s))}">
+    ${state.view === 'foryou' ? whyHtml(s) : ''}
     <span class="w-top"><span class="w-diff">${Y().settings.key ? diffHtml(cachedFit(s)) : ''}</span><span class="w-love">${loveLabel(s)}</span></span>
     <span class="w-title">${esc(shortTitle(s.title))}</span>
     <span class="w-en" ${english(s)?.title ? '' : 'hidden'}>${enHtml(english(s))}</span>
@@ -222,7 +292,9 @@ function statusLine() {
   const list = state.stories.filter(lengthOk);
   const left = list.filter((s) => !cachedFit(s)).length;
   if (left) return `Checking how hard each story is for you… ${list.length - left} of ${list.length}`;
-  return 'Easiest for you first';
+  if (state.view === 'foryou') return hasInterests() ? 'Picked from what you like, how easy each story is for you, and what readers think' : 'Save stories or add them to your library, and these picks will follow your taste';
+  if (state.view === 'saved') return 'Stories you saved';
+  return state.sort === 'loved' ? 'Most loved first' : 'Easiest for you first';
 }
 
 export async function render() {
@@ -231,12 +303,23 @@ export async function render() {
     root.innerHTML = '<p class="hint d-loading">Web novels work in the Mac version for now. The online version needs its relay set up first.</p>';
     return;
   }
-  const key = [state.mood, state.genre].join('|');
+  if (state.view === 'saved') {
+    state.stories = savedList();
+    state.key = 'saved';
+    state.shown = Math.max(state.shown || 0, state.stories.length);
+    root.innerHTML = viewTabs() + (state.stories.length
+      ? `<p class="hint w-status" id="wnStatus">${statusLine()}</p><ul class="w-list">${state.stories.map(row).join('')}</ul>`
+      : '<p class="hint d-loading">Tap the bookmark on any story to keep it here.</p>');
+    queueFits(); fillEnglish();
+    return;
+  }
+  // For you is gathered once per visit, so saving a story doesn't reshuffle the list under your finger.
+  const key = state.view === 'foryou' ? 'foryou|' + (state.forStamp || 0) : ['browse', state.mood, state.genre].join('|');
   if (key !== state.key) return load(key);
-  root.innerHTML = chips() + (state.loading
+  root.innerHTML = viewTabs() + (state.view === 'browse' ? chips() : '') + (state.loading
     ? '<p class="hint d-loading">Finding stories…</p>'
     : state.error ? `<p class="hint d-loading">${esc(state.error)}</p><p class="d-loading w-retry"><button class="btn" data-retry>Try again</button></p>`
-    : !sorted().length ? '<p class="hint d-loading">Nothing matches. Try another mood or genre.</p>'
+    : !sorted().length ? `<p class="hint d-loading">${state.view === 'foryou' ? 'No new picks right now. Try Browse.' : 'Nothing matches. Try another mood or genre.'}</p>`
     : `<p class="hint w-status" id="wnStatus">${statusLine()}</p><ul class="w-list">${sorted().slice(0, state.shown).map(row).join('')}</ul>`
       + (sorted().length > state.shown ? '<p class="w-more"><button class="btn" data-more>Show more</button></p>' : ''));
   if (!state.loading) { queueFits(); fillEnglish(); }
@@ -250,7 +333,7 @@ async function load(key) {
   render();
   const mood = MOODS[state.mood], genre = GENRES[state.genre];
   try {
-    const stories = await search({ tags: mood ? mood[1] : [], kk: genre ? genre[1] : [], nr: genre ? genre[2] : [] });
+    const stories = state.view === 'foryou' ? await candidates() : await search({ tags: mood ? mood[1] : [], kk: genre ? genre[1] : [], nr: genre ? genre[2] : [] });
     if (state.key !== key) return;
     state.stories = stories.filter((s) => s.first !== null).slice(0, MAX);
     if (!stories.length) state.error = 'The stories couldn’t be loaded. Check your connection and try again.';
@@ -261,6 +344,28 @@ async function load(key) {
   }
   state.loading = false;
   render();
+}
+
+// Stories to recommend: searches for your favourite tags and genre, leaving out what you've
+// already saved or added. The 30 that best match your interests and readers' ratings are
+// then checked for difficulty, which decides the final order.
+async function candidates() {
+  const p = interests();
+  const tags = hasInterests() ? topOf(p.tags, 3) : ['ほのぼの', 'コメディ', 'ヒューマンドラマ'];
+  const g = GENRES[topOf(p.genres, 1)[0]];
+  const lists = await Promise.all([
+    search({ tags }),
+    g ? search({ kk: g[1], nr: g[2] }).catch(() => []) : [],
+  ]);
+  const seen = new Set(Object.keys(savedAll())), out = [];
+  for (const s of lists.flat()) {
+    if (seen.has(fitId(s))) continue;
+    seen.add(fitId(s));
+    if (await Y().findWebBook(s.site, s.id)) continue;
+    out.push(s);
+  }
+  const prelim = (s) => 0.6 * interestMatch(s).score + 0.4 * Math.min(1, Math.log10(loveScore(s) + 1) / 4.3);
+  return out.sort((a, b) => prelim(b) - prelim(a)).slice(0, 30);
 }
 
 // Check stories one at a time, in the order shown, then sort them easiest first.
@@ -340,7 +445,7 @@ function opening(text, n) {
 }
 
 async function openStory(id) {
-  const s = state.stories.find((x) => fitId(x) === id);
+  const s = state.stories.find((x) => fitId(x) === id) || savedAll()[id];
   if (!s) return;
   current = s;
   const inLib = await Y().findWebBook(s.site, s.id);
@@ -366,6 +471,7 @@ async function openStory(id) {
       <button class="btn primary" id="wnAdd">${inLib ? 'Open' : 'Add to library'}</button>
       <button class="btn" id="wnSample">Read sample</button>
     </div>
+    <button class="btn w-save-lg${isSaved(s) ? ' on' : ''}" id="wnSave">${BOOKMARK}<span>${isSaved(s) ? 'Saved' : 'Save for later'}</span></button>
     <p class="hint" id="wnMsg"></p>
     <p class="hint"><a href="${esc(s.url)}" target="_blank" rel="noopener">Open on ${SITES[s.site]}</a></p>`;
   Y().openSheet('bookSheet');
@@ -381,6 +487,12 @@ async function openStory(id) {
   $('wnIntro')?.addEventListener('click', (e) => e.currentTarget.classList.toggle('open'));
   $('wnAdd').onclick = () => (inLib ? Y().openBook(inLib) : add(s));
   $('wnSample').onclick = () => toggleSample(s);
+  $('wnSave').onclick = () => {
+    const on = toggleSaved(s);
+    $('wnSave').classList.toggle('on', on);
+    $('wnSave').querySelector('span').textContent = on ? 'Saved' : 'Save for later';
+    syncSaveButtons(s);
+  };
   try {
     const text = await firstEpisode(s);
     if (current !== s) return;
@@ -389,6 +501,15 @@ async function openStory(id) {
   } catch {
     if (current === s) $('wnFirst').innerHTML = '<span class="hint">Couldn’t load the first episode. Check your connection.</span>';
   }
+}
+function syncSaveButtons(s) {
+  document.querySelectorAll(`[data-save="${CSS.escape(fitId(s))}"]`).forEach((b) => {
+    b.classList.toggle('on', isSaved(s));
+    b.setAttribute('aria-pressed', isSaved(s));
+    b.setAttribute('aria-label', isSaved(s) ? 'Remove from saved' : 'Save');
+  });
+  const tab = document.querySelector('[data-view="saved"]');
+  if (tab) { const n = Object.keys(savedAll()).length; tab.innerHTML = `Saved${n ? ` <span>${n}</span>` : ''}`; }
 }
 async function toggleSample(s) {
   const text = await firstEpisode(s);
@@ -402,6 +523,7 @@ async function add(s) {
   btn.disabled = true;
   try {
     const { id } = await addStory(s, say);
+    addInterest(s, 3);
     if (current !== s) return;
     btn.textContent = 'Open';
     btn.onclick = () => Y().openBook(id);
@@ -417,11 +539,22 @@ async function add(s) {
 
 export function init() {
   $('webBody').addEventListener('click', (e) => {
+    const sv = e.target.closest('[data-save]');
+    if (sv) {
+      const s = state.stories.find((x) => fitId(x) === sv.dataset.save) || savedAll()[sv.dataset.save];
+      if (s) { toggleSaved(s); syncSaveButtons(s); }
+      return;
+    }
+    const v = e.target.closest('[data-view]');
+    if (v) { if (v.dataset.view !== state.view) { state.view = v.dataset.view; state.key = ''; state.shown = PAGE; state.forStamp = Date.now(); saveState(); render(); } return; }
     const so = e.target.closest('[data-sort]');
     if (so) { state.sort = so.dataset.sort; state.shown = PAGE; saveState(); return render(); }
     const c = e.target.closest('[data-mood],[data-genre],[data-length]');
     if (c) {
       for (const k of ['mood', 'genre', 'length']) if (c.dataset[k] !== undefined) state[k] = state[k] === c.dataset[k] ? '' : c.dataset[k];
+      // Browsing a mood or genre counts a little towards your interests.
+      if (c.dataset.mood && state.mood) bump({ tags: Object.fromEntries(MOODS[state.mood][1].map((t) => [t, 1])) });
+      if (c.dataset.genre && state.genre) bump({ genres: { [state.genre]: 1 } });
       saveState();
       return render();
     }
