@@ -60,7 +60,9 @@ const KK_GENRES = { FANTASY: 'Other-world fantasy', ACTION: 'Modern fantasy', SF
 
 function apollo(doc) {
   const raw = doc.getElementById('__NEXT_DATA__')?.textContent;
-  return raw ? JSON.parse(raw)?.props?.pageProps?.__APOLLO_STATE__ || null : null;
+  if (!raw) throw new Error(`Kakuyomu sent back a page Yomu didn’t expect (“${(doc.title || 'no title').slice(0, 60)}”).`);
+  try { return JSON.parse(raw)?.props?.pageProps?.__APOLLO_STATE__ || null; }
+  catch { throw new Error('Kakuyomu sent back a page Yomu couldn’t read.'); }
 }
 function kkStory(st, w) {
   const ref = (r) => (r && r.__ref ? st[r.__ref] : null);
@@ -118,7 +120,10 @@ function nrStory(x) {
 }
 async function nrApi(params) {
   const p = new URLSearchParams({ out: 'json', of: NR_FIELDS, ...params });
-  const data = JSON.parse(await fetchVia(`https://api.syosetu.com/novelapi/api/?${p}`));
+  const text = await fetchVia(`https://api.syosetu.com/novelapi/api/?${p}`);
+  let data;
+  try { data = JSON.parse(text); }
+  catch { throw new Error(`Narou sent back a page Yomu didn’t expect (“${text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80)}”).`); }
   return data.slice(1).map(nrStory);
 }
 // One page of Narou search results. Keyword search looks only at the authors' tags.
