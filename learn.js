@@ -72,11 +72,12 @@ function render() {
   }
   const s = it.sentence || {};
   const sentence = s.word ? `${esc(s.before)}<b>${esc(s.word)}</b>${esc(s.after)}` : '';
+  // The reading shows from the start on the first round; words you forgot come back without it.
   const reading = it.reading && it.reading !== it.spelling ? it.reading : '';
   box.innerHTML = `${session.done === 0 && !session.shown ? lockedHtml() : ''}
     <p class="ln-progress">${Math.min(session.done + 1, session.total)} of ${session.total}${session.again.has(key(it)) ? ' · once more' : ''}</p>
     <div class="ln-card">
-      <ruby class="ln-word">${esc(it.spelling)}<rt>${session.shown ? esc(reading) : ''}</rt></ruby>
+      <ruby class="ln-word">${esc(it.spelling)}<rt>${session.shown || !session.again.has(key(it)) ? esc(reading) : ''}</rt></ruby>
       ${sentence ? `<p class="ln-sentence">${sentence}</p>` : ''}
       ${it.book ? `<p class="ln-book">From ${esc(it.book)}</p>` : ''}
     </div>
