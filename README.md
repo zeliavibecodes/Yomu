@@ -37,6 +37,7 @@ Keep the original files in iCloud Drive. The copy inside Yomu is for reading, no
 
 - **Tap a word** to see its reading, meanings, and the sentence it's in. A line under the word says how common it is (Very common, Common, Less common, Uncommon or Rare), from jpdb's ranking of the words most used in Japanese media, so you can decide whether it's worth adding to a deck.
 - **Add to deck** adds it to your chosen deck, with the sentence attached (you can turn that off in Settings).
+- **Learn new words** right after reading: words you add from Yomu wait in a short learning session. Open it any time with the small cap button in the reading bar (it shows how many words are waiting), or with **Learn new words** at the end of a chapter. Each card shows the word in the sentence where you found it; tap **Show answer**, then grade it Forgot, Hard, Okay or Easy. The grade goes to jpdb as a review, so the word starts its normal review schedule there. Words you forget come back once at the end of the session.
 - **I know this** marks it as known on jpdb, so it stops showing readings.
 - **Turn pages** by tapping the left or right side of the screen, or swiping. Vertical books read right to left, like a printed Japanese book: tap the left side or swipe right for the next page. Horizontal books are the other way round.
 - **Tap the middle** of the page to hide or show the top bar.

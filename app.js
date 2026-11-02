@@ -657,6 +657,8 @@ async function flushPending() {
       if (it.sentence && it.deck !== 'never-forget' && it.sentence.length <= 300) {
         try { await jpdb('set-card-sentence', { vid, sid, sentence: it.sentence }); } catch {}
       }
+      // Words looked up offline get a jpdb id only now, so they join the words to learn here.
+      if (!it.vid && it.deck !== 'never-forget') rememberForLearning(vocab.get(vid + '/' + sid), it.word ? { before: it.before || '', word: it.word, after: it.after || '' } : null);
       list.shift(); setPending(list); sent++;
     }
   } catch { /* still offline or jpdb unavailable: try again later */ }
@@ -1010,6 +1012,9 @@ async function buildChapter(index, { images = true } = {}) {
   else if (kk && kk.have < kk.total) end.innerHTML = `<div class="more"><button class="btn" id="moreEpisodes">Get the next ${Math.min(10, kk.total - kk.have)} episodes</button><p class="hint" id="moreMsg">${kk.total - kk.have} more on ${(kk.site || 'kakuyomu') === 'narou' ? 'Narou' : 'Kakuyomu'}</p></div>`;
   else if (kk && !kk.finished) end.innerHTML = '<div class="more"><button class="btn" id="moreEpisodes">Check for new episodes</button><p class="hint" id="moreMsg">The author is still writing this story.</p></div>';
   else end.innerHTML = '<span class="hint">End of the book</span>';
+  // Learn the words added while reading, right after the chapter.
+  const learnN = learnList().length;
+  end.insertAdjacentHTML('afterbegin', `<button class="btn primary chapter-learn" id="chapterLearn" ${learnN ? '' : 'hidden'}>Learn ${learnN} new word${learnN === 1 ? '' : 's'}</button>`);
   root.appendChild(end);
 
   // Find the paragraphs worth sending to jpdb.
@@ -1399,13 +1404,48 @@ function updateWordEverywhere(v) {
   $('wState').className = 'word-state' + (v.state ? '' : ' none');
 }
 
+/* ---------- Words waiting to be learned ---------- */
+// Words added to a deck from Yomu, kept with the sentence they came from, until you learn
+// them in Yomu's Learn session (or they're learned on jpdb).
+const LEARN_KEY = 'yomu.tolearn';
+function learnList() { try { return JSON.parse(localStorage.getItem(LEARN_KEY) || '[]'); } catch { return []; } }
+function setLearn(l) { try { localStorage.setItem(LEARN_KEY, JSON.stringify(l)); } catch {} }
+function rememberForLearning(v, sentence) {
+  if (!v?.vid) return;
+  const l = learnList().filter((x) => !(x.vid === v.vid && x.sid === v.sid));
+  l.push({ vid: v.vid, sid: v.sid, spelling: v.spelling, reading: v.reading, meanings: (v.meanings || []).slice(0, 3),
+    sentence: sentence ? { before: sentence.before, word: sentence.word, after: sentence.after } : null,
+    book: reader.book?.title ? shortTitle(reader.book.title) : '', at: Date.now() });
+  setLearn(l);
+  refreshLearn();
+}
+function learned(it) {
+  setLearn(learnList().filter((x) => !(x.vid === it.vid && x.sid === it.sid)));
+  const v = vocab.get(it.vid + '/' + it.sid);
+  if (v) { v.state = ['learning']; updateWordEverywhere(v); }
+  refreshLearn();
+}
+// The small "learn" button in the reading bar, and the one at the end of a chapter.
+function refreshLearn() {
+  const n = learnList().length;
+  $('learnBtn').hidden = !n;
+  $('learnCount').textContent = n;
+  $('learnBtn').setAttribute('aria-label', `Learn ${n} new word${n === 1 ? '' : 's'}`);
+  const end = $('chapterLearn');
+  if (end) { end.hidden = !n; end.textContent = `Learn ${n} new word${n === 1 ? '' : 's'}`; }
+}
+async function startLearning() {
+  (await import(`./learn.js${V}`)).start();
+}
+
 async function addCurrent(deckId, newState, doneMsg) {
   if (!current) return;
   if (!settings.key) return ($('wMsg').textContent = 'Add your jpdb key in Settings first.');
   if (deckId === null) return ($('wMsg').textContent = 'Choose a deck in Settings first.');
   const { v, sentence } = current;
   const queueIt = () => {
-    queueWord({ vid: v.vid || null, sid: v.sid || null, deck: deckId, sentence: settings.sentence || !v.vid ? sentence.full : '', spelling: v.spelling, offset: sentence.before.length });
+    queueWord({ vid: v.vid || null, sid: v.sid || null, deck: deckId, sentence: settings.sentence || !v.vid ? sentence.full : '', spelling: v.spelling, offset: sentence.before.length, before: sentence.before, word: sentence.word, after: sentence.after });
+    if (deckId !== 'never-forget') rememberForLearning(v, sentence);
     v.state = newState;
     updateWordEverywhere(v);
     $('wMsg').textContent = "You're offline. It will go to your deck when you're back online.";
@@ -1420,6 +1460,7 @@ async function addCurrent(deckId, newState, doneMsg) {
     }
     v.state = newState;
     updateWordEverywhere(v);
+    if (deckId !== 'never-forget') rememberForLearning(v, sentence);
     $('wMsg').textContent = doneMsg;
   } catch (e) {
     if (e.code === 'offline') queueIt();
@@ -1756,11 +1797,14 @@ function init() {
   setTimeout(flushPending, 1500);
   $('libSettingsBtn').addEventListener('click', () => openSheet('settingsSheet'));
   $('scrim').addEventListener('click', closeSheet);
+  $('learnBtn').addEventListener('click', startLearning);
+  refreshLearn();
   document.querySelectorAll('.sheet').forEach(enableSheetSwipe);
   document.querySelectorAll('.close-sheet').forEach((b) => b.addEventListener('click', closeSheet));
 
   $('text').addEventListener('click', (e) => {
     if (e.target.closest('#nextChapter')) return loadChapter(reader.chapter + 1);
+    if (e.target.closest('#chapterLearn')) return startLearning();
     if (e.target.closest('#moreEpisodes')) return moreEpisodes();
     const link = e.target.closest('[data-target]');
     if (link) {
@@ -1840,6 +1884,7 @@ function init() {
 window.yomu = {
   get settings() { return settings; }, speed, vocab, parseTexts, toast, openSheet, closeSheet,
   addBookBuffer, findAozoraBook, findWebBook, openBook,
+  jpdb, learnList, learned, refreshLearn,
 };
 
 init();

@@ -592,3 +592,24 @@ button.add-book { border: 0; font-family: inherit; }
 .freq-bars i { display: block; width: 3px; border-radius: 1px; background: var(--fill-strong); }
 .freq-bars i:nth-child(1) { height: 4px; } .freq-bars i:nth-child(2) { height: 6.5px; } .freq-bars i:nth-child(3) { height: 9px; } .freq-bars i:nth-child(4) { height: 12px; }
 .freq-bars i.on { background: var(--ink); }
+
+/* Learn new words */
+.learn-btn { position: relative; }
+.learn-count { position: absolute; top: 4px; right: 2px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--ink); color: var(--paper); font-size: 10px; font-weight: 700; line-height: 16px; text-align: center; }
+.chapter-end { gap: 12px; }
+.chapter-end .chapter-learn { writing-mode: horizontal-tb; }
+.ln-progress { font-size: 13px; color: var(--muted); margin: -4px 0 16px; font-variant-numeric: tabular-nums; }
+.ln-card { background: var(--fill); border-radius: 18px; padding: 26px 20px 20px; margin-bottom: 18px; text-align: center; }
+.ln-word { font-family: var(--body-font, var(--mincho)); font-size: 46px; line-height: 1.2; ruby-position: over; letter-spacing: 0.02em; }
+.ln-word rt { font-family: var(--ui); font-size: 15px; color: var(--muted); letter-spacing: 0.08em; padding-bottom: 4px; min-height: 1em; }
+.ln-sentence { font-family: var(--mincho); font-size: 16px; line-height: 1.8; color: var(--ink-2); margin: 18px 0 0; text-align: left; }
+.ln-sentence b { color: var(--ink); font-weight: 600; background: color-mix(in srgb, var(--ink) 8%, transparent); border-radius: 3px; padding: 0 2px; }
+.ln-book { font-size: 12px; color: var(--muted); margin: 10px 0 0; text-align: left; }
+.ln-meanings { margin-bottom: 18px; }
+.ln-show { width: 100%; }
+.ln-grades { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.ln-grades .btn { padding: 12px 4px; font-size: 14px; }
+.ln-skip { display: block; margin: 14px auto 0; font-size: 14px; color: var(--muted); }
+.ln-end { text-align: center; padding: 30px 0 10px; }
+.ln-end-big { font-size: 24px; font-weight: 700; margin: 0 0 6px; }
+.ln-end .btn { margin-top: 22px; min-width: 200px; }
