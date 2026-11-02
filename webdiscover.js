@@ -103,7 +103,8 @@ function loveScore(s) {
   const n = s.site === 'kakuyomu' ? s.stars : s.bookmarks;
   return (n || 0) / Math.max(1, Math.sqrt((s.chars || 0) / 100000));
 }
-const loveLabel = (s) => { const v = loveScore(s); return v >= 5000 ? 'Loved by many' : v >= 1000 ? 'Popular' : v >= 150 ? 'Liked' : 'Few readers yet'; };
+// Thresholds set from real Kakuyomu numbers: in the all-time popular lists, about a fifth reach 'Loved by many'.
+const loveLabel = (s) => { const v = loveScore(s); return v >= 10000 ? 'Loved by many' : v >= 3000 ? 'Popular' : v >= 500 ? 'Liked' : v >= 50 ? 'Some readers' : 'Few readers yet'; };
 const compact = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(n >= 1e7 ? 0 : 1)}M` : n >= 1e4 ? `${Math.round(n / 1e3)}k` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}k` : String(n));
 
 const lengthOk = (s) => !state.length || (state.length === 'short' ? minutes(s.chars) <= SHORT : minutes(s.chars) > SHORT);
@@ -166,7 +167,7 @@ function diffHtml(f) {
 /* ---------- English titles and summaries (Gemini, through the Vercel relay) ---------- */
 
 const ENGLISH_URL = 'https://yomu-vercel.vercel.app/api/summary';
-const EN_KEY = 'yomu.english';
+const EN_KEY = 'yomu.english2';
 let englishOff = false;   // set when the relay has no Gemini key, so Yomu stops asking
 function english(s) {
   try { return JSON.parse(localStorage.getItem(EN_KEY) || '{}')[fitId(s)] || null; } catch { return null; }

@@ -59,7 +59,7 @@ export async function POST(request) {
       const stories = (body.stories || []).slice(0, 12).map((s) => ({ id: clip(s.id, 40), title: clip(s.title, 200), pitch: clip(s.pitch, 200), tags: (s.tags || []).slice(0, 12).map((t) => clip(t, 30)), review: clip(s.review, 120) }));
       if (!stories.length) return json({ stories: [] }, 200, cors);
       const out = await gemini(
-        `${STYLE}\nFor each story below, give a short natural English title (under 8 words) and one line saying what it's about (under 16 words). If it has a "review" (a reader's review headline), translate it naturally as "quote"; otherwise leave "quote" empty.\n\n${JSON.stringify(stories)}`,
+        `${STYLE}\nFor each story below, give a short natural English title (under 8 words) and one line saying what it's about (under 16 words). If it has a "review" (a reader's review headline) that says something about what the story is like (its feel, characters, humour, writing), translate it naturally as "quote". Leave "quote" empty when there's no review, or when the review only congratulates the author, mentions a book or anime, thanks them, or says nothing about the story itself.\n\n${JSON.stringify(stories)}`,
         { type: 'OBJECT', properties: { stories: { type: 'ARRAY', items: { type: 'OBJECT', properties: { id: { type: 'STRING' }, title: { type: 'STRING' }, line: { type: 'STRING' }, quote: { type: 'STRING' } }, required: ['id', 'title', 'line'] } } }, required: ['stories'] },
       );
       return json({ stories: out.stories || [] }, 200, cors);
