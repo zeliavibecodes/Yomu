@@ -73,7 +73,27 @@ function kkStory(st, w) {
     genre: KK_GENRES[w.genre] || '', chars: +w.totalCharacterCount || 0, count: +w.publicEpisodeCount || 0,
     finished: w.serialStatus === 'COMPLETED', short: false, first: ref(w.firstPublicEpisodeUnion)?.id || null,
     url: `https://kakuyomu.jp/works/${w.id}`,
+    // What readers think: total stars (each reader gives up to 3), whether it became a book,
+    // and the headlines of a couple of reader reviews.
+    stars: +w.totalReviewPoint || 0, book: !!w.hasPublication,
+    headlines: (w.textualWorkReviewsForCatchphraseInRandom || []).map((r) => ref(r)?.title).filter(Boolean),
   };
+}
+
+// Followers, reads, average stars and recent reader reviews, from a story's own page.
+export async function readerDetails(story) {
+  if (story.site === 'narou') {
+    return { bookmarks: story.bookmarks, ratings: story.ratings, average: story.ratings ? story.points / story.ratings : 0, outOf: 10, reviewCount: story.reviewCount, reviews: [] };
+  }
+  const st = apollo(await fetchDoc(`https://kakuyomu.jp/works/${story.id}`));
+  const w = st?.[`Work:${story.id}`];
+  if (!w) return null;
+  const ref = (r) => (r && r.__ref ? st[r.__ref] : null);
+  const reviews = (ref(w.workTopWorkReviews)?.newTextualWorkReviews || []).map(ref)
+    .filter((r) => r && r.isSpoiler !== true && r.body).slice(0, 3)
+    .map((r) => ({ title: r.title || '', body: r.body.slice(0, 400), stars: +r.point || 0 }));
+  const ratings = +w.reviewCount || 0;
+  return { followers: +w.totalFollowers || 0, reads: +w.totalReadCount || 0, ratings, average: ratings ? (+w.totalReviewPoint || 0) / ratings : 0, outOf: 3, reviews };
 }
 
 // One page of Kakuyomu search results (20 stories).
@@ -108,7 +128,7 @@ async function kkWork(id) {
 /* ---------- Narou ---------- */
 
 const NR_GENRES = { 101: 'Other-world romance', 102: 'Romance', 201: 'High fantasy', 202: 'Modern fantasy', 301: 'Literary', 302: 'Drama', 303: 'History', 304: 'Mystery', 305: 'Horror', 306: 'Action', 307: 'Comedy', 401: 'VR game', 402: 'Space', 403: 'Sci-fi', 404: 'Disaster', 9901: 'Fairy tale', 9902: 'Poetry', 9903: 'Essay', 9904: 'Replay', 9999: 'Other' };
-const NR_FIELDS = 't-n-w-s-g-k-l-e-nt-ga';
+const NR_FIELDS = 't-n-w-s-g-k-l-e-nt-ga-f-r-a-ah';
 
 function nrStory(x) {
   const id = String(x.ncode).toLowerCase();
@@ -117,7 +137,9 @@ function nrStory(x) {
     tags: String(x.keyword || '').split(/\s+/).filter(Boolean), genre: NR_GENRES[x.genre] || '',
     chars: +x.length || 0, count: +x.general_all_no || 1, finished: +x.end === 0, short: +x.noveltype === 2,
     first: +x.noveltype === 2 ? '' : '1', url: `https://ncode.syosetu.com/${id}/`,
-  };
+    // What readers think: bookmarks, and ratings out of 10 (5 for the story, 5 for the writing).
+    bookmarks: +x.fav_novel_cnt || 0, points: +x.all_point || 0, ratings: +x.all_hyoka_cnt || 0, reviewCount: +x.review_cnt || 0,
+    book: /書籍化|コミカライズ/.test(x.title + ' ' + (x.story || '').slice(0, 200)), headlines: [],
 }
 async function nrApi(params) {
   const p = new URLSearchParams({ out: 'json', of: NR_FIELDS, ...params });

@@ -3,6 +3,7 @@
 //
 // POST { mode: 'list', stories: [{ id, title, pitch, tags }] }  → { stories: [{ id, title, line }] }
 // POST { mode: 'story', story: { title, pitch, intro, tags } }   → { title, summary }
+// POST { mode: 'reviews', reviews: [{ title, body }] }            → { reviews: [{ title, body }] }
 
 const ORIGINS = [/^https:\/\/zeliavibecodes\.github\.io$/, /^http:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?$/];
 const MODELS = [process.env.GEMINI_MODEL, 'gemini-3.5-flash-lite', 'gemini-flash-latest'].filter(Boolean);
@@ -55,13 +56,22 @@ export async function POST(request) {
 
   try {
     if (body.mode === 'list') {
-      const stories = (body.stories || []).slice(0, 12).map((s) => ({ id: clip(s.id, 40), title: clip(s.title, 200), pitch: clip(s.pitch, 200), tags: (s.tags || []).slice(0, 12).map((t) => clip(t, 30)) }));
+      const stories = (body.stories || []).slice(0, 12).map((s) => ({ id: clip(s.id, 40), title: clip(s.title, 200), pitch: clip(s.pitch, 200), tags: (s.tags || []).slice(0, 12).map((t) => clip(t, 30)), review: clip(s.review, 120) }));
       if (!stories.length) return json({ stories: [] }, 200, cors);
       const out = await gemini(
-        `${STYLE}\nFor each story below, give a short natural English title (under 8 words) and one line saying what it's about (under 16 words).\n\n${JSON.stringify(stories)}`,
-        { type: 'OBJECT', properties: { stories: { type: 'ARRAY', items: { type: 'OBJECT', properties: { id: { type: 'STRING' }, title: { type: 'STRING' }, line: { type: 'STRING' } }, required: ['id', 'title', 'line'] } } }, required: ['stories'] },
+        `${STYLE}\nFor each story below, give a short natural English title (under 8 words) and one line saying what it's about (under 16 words). If it has a "review" (a reader's review headline), translate it naturally as "quote"; otherwise leave "quote" empty.\n\n${JSON.stringify(stories)}`,
+        { type: 'OBJECT', properties: { stories: { type: 'ARRAY', items: { type: 'OBJECT', properties: { id: { type: 'STRING' }, title: { type: 'STRING' }, line: { type: 'STRING' }, quote: { type: 'STRING' } }, required: ['id', 'title', 'line'] } } }, required: ['stories'] },
       );
       return json({ stories: out.stories || [] }, 200, cors);
+    }
+    if (body.mode === 'reviews') {
+      const reviews = (body.reviews || []).slice(0, 3).map((r) => ({ title: clip(r.title, 100), body: clip(r.body, 400) }));
+      if (!reviews.length) return json({ reviews: [] }, 200, cors);
+      const out = await gemini(
+        `Translate these reader reviews of a Japanese web novel into plain, natural English, keeping each reader's tone. Shorten each body to at most 2 sentences. Keep them in the same order.\n\n${JSON.stringify(reviews)}`,
+        { type: 'OBJECT', properties: { reviews: { type: 'ARRAY', items: { type: 'OBJECT', properties: { title: { type: 'STRING' }, body: { type: 'STRING' } }, required: ['title', 'body'] } } }, required: ['reviews'] },
+      );
+      return json({ reviews: out.reviews || [] }, 200, cors);
     }
     const s = body.story || {};
     const story = { title: clip(s.title, 200), pitch: clip(s.pitch, 200), intro: clip(s.intro, 2500), tags: (s.tags || []).slice(0, 15).map((t) => clip(t, 30)) };

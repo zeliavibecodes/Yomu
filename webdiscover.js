@@ -2,7 +2,7 @@
 // story's difficulty measured against your own jpdb words.
 
 // Loaded with the same version as the rest of the app, so there's only ever one copy of it.
-const { search, firstEpisode, addStory, SITES, relayReady } = await import(`./webnovel.js${new URL(import.meta.url).search}`);
+const { search, firstEpisode, addStory, readerDetails, SITES, relayReady } = await import(`./webnovel.js${new URL(import.meta.url).search}`);
 
 const Y = () => window.yomu;
 const $ = (id) => document.getElementById(id);
@@ -28,9 +28,9 @@ const GENRES = {
 const MAX = 40;   // stories gathered per list
 const PAGE = 10;  // stories shown at a time
 
-const state = { mood: '', genre: '', length: '', stories: [], loading: false, key: '' };
+const state = { mood: '', genre: '', length: '', sort: 'easy', stories: [], loading: false, key: '' };
 try { Object.assign(state, JSON.parse(localStorage.getItem('yomu.web') || '{}'), { stories: [], loading: false, key: '' }); } catch {}
-const saveState = () => { try { localStorage.setItem('yomu.web', JSON.stringify({ mood: state.mood, genre: state.genre, length: state.length })); } catch {} };
+const saveState = () => { try { localStorage.setItem('yomu.web', JSON.stringify({ mood: state.mood, genre: state.genre, length: state.length, sort: state.sort })); } catch {} };
 
 /* ---------- Reading time and difficulty ---------- */
 
@@ -91,13 +91,26 @@ function chips() {
   const row = (group, items, current) => items.map(([k, label]) => `<button class="chip${current === k ? ' on' : ''}" data-${group}="${k}">${label}</button>`).join('');
   return `<p class="w-lbl">Mood</p><div class="d-chips w-chips">${row('mood', Object.entries(MOODS).map(([k, v]) => [k, v[0]]), state.mood)}</div>
     <p class="w-lbl">Genre</p><div class="d-chips w-chips">${row('genre', Object.entries(GENRES).map(([k, v]) => [k, v[0]]), state.genre)}</div>
-    <div class="d-chips w-chips">${row('length', [['short', 'Short reads'], ['long', 'Long series']], state.length)}</div>`;
+    <div class="d-chips w-chips">${row('length', [['short', 'Short reads'], ['long', 'Long series']], state.length)}</div>
+    <div class="w-sort" role="group" aria-label="Order">${[['easy', 'Easiest for me'], ['loved', 'Most loved']].map(([k, l]) => `<button class="${state.sort === k ? 'on' : ''}" data-sort="${k}">${l}</button>`).join('')}</div>`;
 }
+
+/* ---------- What other readers think ---------- */
+
+// How much readers like a story: Kakuyomu stars or Narou bookmarks, weighed against length,
+// so a short story with a devoted following can rank with a long, well-known series.
+function loveScore(s) {
+  const n = s.site === 'kakuyomu' ? s.stars : s.bookmarks;
+  return (n || 0) / Math.max(1, Math.sqrt((s.chars || 0) / 100000));
+}
+const loveLabel = (s) => { const v = loveScore(s); return v >= 5000 ? 'Loved by many' : v >= 1000 ? 'Popular' : v >= 150 ? 'Liked' : 'Few readers yet'; };
+const compact = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(n >= 1e7 ? 0 : 1)}M` : n >= 1e4 ? `${Math.round(n / 1e3)}k` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}k` : String(n));
 
 const lengthOk = (s) => !state.length || (state.length === 'short' ? minutes(s.chars) <= SHORT : minutes(s.chars) > SHORT);
 
 function sorted() {
   const list = state.stories.filter(lengthOk);
+  if (state.sort === 'loved') return [...list].sort((a, b) => loveScore(b) - loveScore(a));
   if (!Y().settings.key) return list;
   // Easiest first; stories not checked yet keep their place after the checked ones.
   const scored = list.filter(cachedFit).sort((a, b) => cachedFit(b).pct - cachedFit(a).pct);
@@ -173,21 +186,21 @@ async function askEnglish(body) {
     return res.ok ? await res.json() : null;
   } catch { return null; }
 }
-const enHtml = (e) => (e?.title ? `<span class="w-en-t">${esc(e.title)}</span>${e.line ? `<span class="w-en-l">${esc(e.line)}</span>` : ''}` : '');
+const enHtml = (e) => (e?.title ? `<span class="w-en-t">${esc(e.title)}</span>${e.line ? `<span class="w-en-l">${esc(e.line)}</span>` : ''}${e.quote ? `<span class="w-quote">“${esc(e.quote)}” <em>— a reader</em></span>` : ''}` : '');
 
 // English titles and one-line descriptions for the stories on screen, in one request.
 let englishBusy = false;
 async function fillEnglish() {
   if (englishBusy || englishOff) return;
-  const visible = sorted().slice(0, state.shown).filter((s) => !english(s)?.title);
+  const visible = sorted().slice(0, state.shown).filter((s) => !english(s)?.title || (english(s).quote === undefined && s.headlines?.length));
   if (!visible.length) return;
   englishBusy = true;
-  const out = await askEnglish({ mode: 'list', stories: visible.map((s) => ({ id: fitId(s), title: s.title, pitch: s.pitch, tags: s.tags })) });
+  const out = await askEnglish({ mode: 'list', stories: visible.map((s) => ({ id: fitId(s), title: s.title, pitch: s.pitch, tags: s.tags, review: s.headlines?.[0] || '' })) });
   englishBusy = false;
   for (const x of out?.stories || []) {
     const s = visible.find((v) => fitId(v) === x.id);
     if (!s) continue;
-    saveEnglish(s, { title: x.title, line: x.line });
+    saveEnglish(s, { title: x.title, line: x.line, quote: x.quote || '' });
     document.querySelectorAll(`.w-list [data-s="${CSS.escape(x.id)}"] .w-en`).forEach((el) => { el.innerHTML = enHtml(english(s)); el.hidden = false; });
   }
 }
@@ -195,11 +208,11 @@ async function fillEnglish() {
 function row(s) {
   const t = topics(s);
   return `<li><button class="w-card" data-s="${esc(fitId(s))}">
-    <span class="w-diff">${Y().settings.key ? diffHtml(cachedFit(s)) : ''}</span>
+    <span class="w-top"><span class="w-diff">${Y().settings.key ? diffHtml(cachedFit(s)) : ''}</span><span class="w-love">${loveLabel(s)}</span></span>
     <span class="w-title">${esc(shortTitle(s.title))}</span>
     <span class="w-en" ${english(s)?.title ? '' : 'hidden'}>${enHtml(english(s))}</span>
     ${t.length ? `<span class="w-topics">${t.map((x) => `<span>${esc(x)}</span>`).join('')}</span>` : ''}
-    <span class="w-meta">${esc([s.genre, timeLabel(s.chars), status(s)].filter(Boolean).join(' · '))}</span>
+    <span class="w-meta">${esc([s.genre, timeLabel(s.chars), status(s), s.book ? 'Became a book' : ''].filter(Boolean).join(' · '))}</span>
   </button></li>`;
 }
 
@@ -290,6 +303,33 @@ function summaryHtml(s) {
   if (!e?.summary) return '<p class="w-sum-wait">Writing an English summary…</p>';
   return `${e.title ? `<p class="w-sum-t">${esc(e.title)}</p>` : ''}<p class="w-sum-p">${esc(e.summary)}</p>`;
 }
+// Ratings, followers and a few translated reviews for the story that's open.
+async function showReaders(s) {
+  const el = () => (current === s ? $('wnReaders') : null);
+  let d = null;
+  try { d = await readerDetails(s); } catch {}
+  if (!el()) return;
+  const facts = [];
+  if (d?.average) facts.push(`<div><b>${d.average.toFixed(1)}</b><span>average of ${d.outOf} ${d.outOf === 3 ? 'stars' : 'points'}</span></div>`);
+  if (d?.ratings) facts.push(`<div><b>${compact(d.ratings)}</b><span>readers rated it</span></div>`);
+  if (d?.followers) facts.push(`<div><b>${compact(d.followers)}</b><span>follow it</span></div>`);
+  if (d?.bookmarks) facts.push(`<div><b>${compact(d.bookmarks)}</b><span>bookmarked it</span></div>`);
+  if (d?.reads) facts.push(`<div><b>${compact(d.reads)}</b><span>episode reads</span></div>`);
+  el().innerHTML = `<p class="w-love-lg">${loveLabel(s)}${s.book ? ' · Became a book' : ''}</p>`
+    + (facts.length ? `<div class="w-facts">${facts.join('')}</div>` : '')
+    + (d?.reviews?.length ? '<div class="w-reviews" id="wnReviews"><p class="hint">Translating reviews…</p></div>' : '');
+  if (!d?.reviews?.length) return;
+  const cached = english(s)?.reviews;
+  const tr = cached || (await askEnglish({ mode: 'reviews', reviews: d.reviews.map((r) => ({ title: r.title, body: r.body })) }))?.reviews;
+  if (tr?.length && !cached) saveEnglish(s, { reviews: tr });
+  const box = current === s ? $('wnReviews') : null;
+  if (!box) return;
+  const list = d.reviews.map((r, i) => ({ stars: r.stars, title: tr?.[i]?.title || r.title, body: tr?.[i]?.body || r.body }));
+  box.innerHTML = list.map((r) => `<div class="w-review">
+    <p class="w-review-t">${'★'.repeat(Math.max(0, Math.min(3, r.stars)))}<span>${esc(r.title)}</span></p>
+    <p class="w-review-b">${esc(r.body)}</p></div>`).join('');
+}
+
 function opening(text, n) {
   const s = text.replace(/\n+/g, ' ').trim();
   if (s.length <= n) return s;
@@ -317,6 +357,8 @@ async function openStory(id) {
     <div class="fitbox" id="wnFit">${fitHtml(s)}</div>
     ${s.pitch ? `<p class="lbl">In one line</p><p class="w-pitch">${esc(s.pitch)}</p>` : ''}
     ${s.intro ? `<p class="lbl">About</p><p class="w-intro" id="wnIntro">${esc(s.intro.replace(/[ \t　]+\n/g, '\n').replace(/\n{2,}/g, '\n').trim())}</p>` : ''}
+    <p class="lbl">What readers say</p>
+    <div class="w-readers" id="wnReaders"><p class="hint">Loading…</p></div>
     <p class="lbl">Opening lines</p>
     <div class="first" id="wnFirst"><span class="hint">Loading…</span></div>
     <div class="acts">
@@ -326,6 +368,7 @@ async function openStory(id) {
     <p class="hint" id="wnMsg"></p>
     <p class="hint"><a href="${esc(s.url)}" target="_blank" rel="noopener">Open on ${SITES[s.site]}</a></p>`;
   Y().openSheet('bookSheet');
+  showReaders(s);
   if (!englishOff && !english(s)?.summary) {
     askEnglish({ mode: 'story', story: { title: s.title, pitch: s.pitch, intro: s.intro, tags: s.tags } }).then((out) => {
       if (out?.summary) saveEnglish(s, { title: out.title || english(s)?.title, summary: out.summary });
@@ -373,6 +416,8 @@ async function add(s) {
 
 export function init() {
   $('webBody').addEventListener('click', (e) => {
+    const so = e.target.closest('[data-sort]');
+    if (so) { state.sort = so.dataset.sort; state.shown = PAGE; saveState(); return render(); }
     const c = e.target.closest('[data-mood],[data-genre],[data-length]');
     if (c) {
       for (const k of ['mood', 'genre', 'length']) if (c.dataset[k] !== undefined) state[k] = state[k] === c.dataset[k] ? '' : c.dataset[k];
