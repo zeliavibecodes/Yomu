@@ -4,6 +4,7 @@
 // POST { mode: 'list', stories: [{ id, title, pitch, tags }] }  → { stories: [{ id, title, line }] }
 // POST { mode: 'story', story: { title, pitch, intro, tags } }   → { title, summary }
 // POST { mode: 'reviews', reviews: [{ title, body }] }            → { reviews: [{ title, body }] }
+// POST { mode: 'explain', text, context }                         → { translation, literal, points: [{ part, reading, explanation }] }
 
 const ORIGINS = [/^https:\/\/zeliavibecodes\.github\.io$/, /^http:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?$/];
 const MODELS = [process.env.GEMINI_MODEL, 'gemini-3.5-flash-lite', 'gemini-flash-latest'].filter(Boolean);
@@ -63,6 +64,17 @@ export async function POST(request) {
         { type: 'OBJECT', properties: { stories: { type: 'ARRAY', items: { type: 'OBJECT', properties: { id: { type: 'STRING' }, title: { type: 'STRING' }, line: { type: 'STRING' }, quote: { type: 'STRING' } }, required: ['id', 'title', 'line'] } } }, required: ['stories'] },
       );
       return json({ stories: out.stories || [] }, 200, cors);
+    }
+    if (body.mode === 'explain') {
+      const text = clip(body.text, 400), context = clip(body.context, 800);
+      if (!text.trim()) return json({ error: 'Nothing to explain' }, 400, cors);
+      const out = await gemini(
+        `You are helping an English speaker who reads Japanese novels at an intermediate level. Explain the Japanese passage below.
+Give: "translation", a natural English translation; "literal", a closer word-for-word version only if it helps show the structure (otherwise empty); and "points", 2 to 6 grammar points in the order they appear. For each point give "part" (the exact Japanese words it's about), "reading" (in hiragana, only if "part" has kanji), and "explanation" (one or two plain English sentences: what the grammar does here and why it's used). Focus on grammar, conjugations, particles and set expressions rather than ordinary vocabulary. No jargon without a short explanation, no romaji.
+${context && context !== text ? `The passage comes from this part of the book, for context only: ${JSON.stringify(context)}\n` : ''}Passage: ${JSON.stringify(text)}`,
+        { type: 'OBJECT', properties: { translation: { type: 'STRING' }, literal: { type: 'STRING' }, points: { type: 'ARRAY', items: { type: 'OBJECT', properties: { part: { type: 'STRING' }, reading: { type: 'STRING' }, explanation: { type: 'STRING' } }, required: ['part', 'explanation'] } } }, required: ['translation', 'points'] },
+      );
+      return json({ translation: out.translation || '', literal: out.literal || '', points: out.points || [] }, 200, cors);
     }
     if (body.mode === 'reviews') {
       const reviews = (body.reviews || []).slice(0, 3).map((r) => ({ title: clip(r.title, 100), body: clip(r.body, 400) }));

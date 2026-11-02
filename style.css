@@ -618,3 +618,21 @@ button.add-book { border: 0; font-family: inherit; }
 .ln-locked b { color: var(--ink); }
 .ln-locked-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px !important; }
 .ln-locked-list a { font-family: var(--mincho); font-size: 17px; color: var(--ink); background: var(--raised); border-radius: 8px; padding: 4px 10px; text-decoration: none; }
+
+/* Explain a sentence */
+.explain-link { display: block; margin: -12px 0 18px 2px; font-size: 14px; font-weight: 600; color: var(--ink-2); padding: 6px 0; }
+.explain-pill {
+  position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--safe-bottom) + 44px); z-index: 19;
+  border: 0; border-radius: 999px; background: var(--ink); color: var(--paper); font-weight: 600; font-size: 15px;
+  padding: 12px 22px; box-shadow: 0 10px 30px -10px rgba(0,0,0,0.45);
+}
+.ex-text { font-family: var(--body-font, var(--mincho)); font-size: 19px; line-height: 1.8; margin: 0 0 18px; padding: 12px 14px; background: var(--fill); border-radius: 12px; }
+.ex-tr { font-size: 17px; line-height: 1.5; margin: 0 0 8px; }
+.ex-lit { font-size: 14px; line-height: 1.5; color: var(--muted); margin: 0 0 20px; }
+.ex-points { list-style: none; counter-reset: p; margin: 0; padding: 0; }
+.ex-points li { counter-increment: p; padding: 12px 0; border-top: 0.5px solid var(--hair); }
+.ex-points li:first-child { border-top: 0; padding-top: 4px; }
+.ex-part { margin: 0 0 4px; font-family: var(--mincho); font-size: 18px; font-weight: 600; }
+.ex-part span { font-family: var(--ui); font-size: 13px; font-weight: 400; color: var(--muted); margin-left: 8px; }
+.ex-exp { margin: 0; font-size: 15px; line-height: 1.5; color: var(--ink-2); }
+.ex-wait { padding: 10px 0; }

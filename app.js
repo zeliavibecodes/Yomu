@@ -862,6 +862,7 @@ function turnAnimated(target) {
 
 function dragStart(x, y) {
   if (slide.busy || !reader.book) return;
+  if (window.getSelection && !window.getSelection().isCollapsed) return;   // adjusting a text selection, not turning the page
   slide.drag = { x0: x, y0: y, t0: performance.now(), dx: 0, active: false, lastX: x, lastT: performance.now(), v: 0, target: null };
 }
 function dragMove(x, y, e) {
@@ -1361,6 +1362,56 @@ async function fillFreq(v) {
   } catch {}
 }
 
+/* ---------- Explain a sentence (Gemini, through the Vercel relay) ---------- */
+
+const EXPLAIN_URL = 'https://yomu-vercel.vercel.app/api/summary';
+const explained = new Map();   // this session's answers, so the same passage isn't asked twice
+async function explain(text, context) {
+  text = text.replace(/\s+/g, '').trim();
+  if (!text) return;
+  openSheet('explainSheet');
+  $('exText').textContent = text;
+  const body = $('exBody');
+  if (!navigator.onLine) { body.innerHTML = '<p class="hint">You’re offline. Explanations need an internet connection.</p>'; return; }
+  body.innerHTML = '<p class="hint ex-wait">Translating and explaining…</p>';
+  let out = explained.get(text);
+  if (!out) {
+    try {
+      const res = await fetch(EXPLAIN_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'explain', text, context: (context || '').replace(/\s+/g, '') }) });
+      if (res.status === 503) throw new Error('Explanations need a Gemini key on the Vercel relay.');
+      if (!res.ok) throw new Error('Gemini couldn’t answer right now. Try again in a moment.');
+      out = await res.json();
+      explained.set(text, out);
+    } catch (e) {
+      if ($('exText').textContent === text) body.innerHTML = `<p class="hint">${esc(e.message || 'Something went wrong.')}</p>`;
+      return;
+    }
+  }
+  if ($('exText').textContent !== text) return;
+  body.innerHTML = `<p class="lbl">Translation</p><p class="ex-tr">${esc(out.translation)}</p>`
+    + (out.literal && out.literal !== out.translation ? `<p class="ex-lit">Word for word: ${esc(out.literal)}</p>` : '')
+    + (out.points?.length ? `<p class="lbl">How it works</p><ol class="ex-points">${out.points.map((p) => `<li><p class="ex-part">${esc(p.part)}${p.reading && p.reading !== p.part ? `<span>${esc(p.reading)}</span>` : ''}</p><p class="ex-exp">${esc(p.explanation)}</p></li>`).join('')}</ol>` : '');
+}
+
+// Selecting text in the book shows a small "Explain" button.
+function selectedInBook() {
+  const sel = window.getSelection();
+  if (!sel || sel.isCollapsed || !reader.book) return null;
+  const range = sel.getRangeAt(0);
+  if (!$('text').contains(range.commonAncestorContainer)) return null;
+  // Leave out readings printed over the words.
+  const frag = range.cloneContents();
+  frag.querySelectorAll('rt, rp').forEach((x) => x.remove());
+  const text = frag.textContent.replace(/\s+/g, '');
+  if (text.length < 2 || !/[\u3040-\u30ff\u3400-\u9fff]/.test(text)) return null;
+  const block = (range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentElement)?.closest('[data-b]');
+  return { text, context: block ? extract(block).text : '' };
+}
+function onSelection() {
+  const s = selectedInBook();
+  $('explainPill').hidden = !s;
+}
+
 function openWord(el) {
   const v = vocab.get(el.dataset.k);
   if (!v) return;
@@ -1379,6 +1430,7 @@ function openWord(el) {
     `<li>${esc(m.g.join('; '))}${m.pos.length ? `<span class="pos">${esc(m.pos.join(', '))}</span>` : ''}</li>`).join('');
   const s = current.sentence;
   $('wSentence').innerHTML = `${esc(s.before)}<b>${esc(s.word)}</b>${esc(s.after)}`;
+  $('explainSentence').onclick = () => explain(s.full, extract(el.closest('[data-b]')).text);
   const deckName = $('deckSelect').selectedOptions[0]?.textContent;
   $('addBtn').textContent = settings.deck && deckName ? `Add to ${deckName}` : 'Add to deck';
   $('addBtn').disabled = false;
@@ -1798,6 +1850,14 @@ function init() {
   $('libSettingsBtn').addEventListener('click', () => openSheet('settingsSheet'));
   $('scrim').addEventListener('click', closeSheet);
   $('learnBtn').addEventListener('click', startLearning);
+  document.addEventListener('selectionchange', onSelection);
+  $('explainPill').addEventListener('click', () => {
+    const s = selectedInBook();
+    $('explainPill').hidden = true;
+    if (!s) return;
+    window.getSelection().removeAllRanges();
+    explain(s.text, s.context);
+  });
   refreshLearn();
   document.querySelectorAll('.sheet').forEach(enableSheetSwipe);
   document.querySelectorAll('.close-sheet').forEach((b) => b.addEventListener('click', closeSheet));

@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="Yomu">
 <link rel="apple-touch-icon" href="icons/icon-180.png?v=2">
 <link rel="manifest" href="manifest.webmanifest?v=2">
-<link rel="stylesheet" href="style.css?v=11030800">
+<link rel="stylesheet" href="style.css?v=11030820">
 <title>Yomu</title>
 </head>
 <body class="furi-unknown dir-vertical">
@@ -98,6 +98,15 @@
 
 <!-- Word sheet -->
 <div id="scrim" class="scrim" hidden></div>
+<button id="explainPill" class="explain-pill" hidden>Explain</button>
+
+<section id="explainSheet" class="sheet tall" hidden aria-label="Explanation">
+  <div class="sheet-grip"></div>
+  <div class="sheet-head"><h2 class="sheet-title">Explanation</h2><button class="text-btn close-sheet">Done</button></div>
+  <p id="exText" class="ex-text"></p>
+  <div id="exBody"></div>
+</section>
+
 <section id="learnSheet" class="sheet tall" hidden aria-label="Learn new words">
   <div class="sheet-grip"></div>
   <div class="sheet-head"><h2 class="sheet-title">Learn new words</h2><button class="text-btn close-sheet">Done</button></div>
@@ -113,6 +122,7 @@
   <p id="wFreq" class="word-freq" hidden></p>
   <ol id="wMeanings" class="meanings"></ol>
   <p id="wSentence" class="word-sentence"></p>
+  <button id="explainSentence" class="text-btn explain-link">Explain this sentence</button>
   <div class="sheet-actions">
     <button id="addBtn" class="btn primary">Add to deck</button>
     <button id="knownBtn" class="btn">I know this</button>
@@ -260,7 +270,7 @@
 
 <div id="toast" class="toast" hidden role="status"></div>
 
-<script src="vendor/jszip.min.js?v=11030800"></script>
-<script type="module" src="app.js?v=11030800"></script>
+<script src="vendor/jszip.min.js?v=11030820"></script>
+<script type="module" src="app.js?v=11030820"></script>
 </body>
 </html>
