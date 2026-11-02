@@ -1402,6 +1402,43 @@ function openSheet(id) {
   $(id).hidden = false;
   $('scrim').hidden = false;
 }
+// Swipe a sheet down to close it, like the sheets in iOS. The drag only starts when the
+// sheet is scrolled to the top, so scrolling its content still works normally.
+function enableSheetSwipe(sheet) {
+  let startY = 0, startT = 0, dy = 0, dragging = false, tracking = false;
+  sheet.addEventListener('touchstart', (e) => {
+    tracking = sheet.scrollTop <= 0 && e.touches.length === 1;
+    dragging = false; dy = 0;
+    startY = e.touches[0].clientY; startT = Date.now();
+  }, { passive: true });
+  sheet.addEventListener('touchmove', (e) => {
+    if (!tracking) return;
+    dy = e.touches[0].clientY - startY;
+    if (!dragging && (dy <= 0 || sheet.scrollTop > 0)) { tracking = dy <= 0 ? tracking && dy > -4 : false; return; }
+    dragging = true;
+    e.preventDefault();
+    sheet.style.transition = 'none';
+    sheet.style.transform = `translateY(${Math.max(0, dy)}px)`;
+    $('scrim').style.opacity = String(Math.max(0.2, 1 - dy / 500));
+  }, { passive: false });
+  const end = () => {
+    if (!dragging) { tracking = false; return; }
+    dragging = tracking = false;
+    const fast = dy / Math.max(1, Date.now() - startT) > 0.6;
+    sheet.style.transition = 'transform 0.22s cubic-bezier(.2,.8,.2,1)';
+    $('scrim').style.opacity = '';
+    if (dy > 110 || (fast && dy > 30)) {
+      sheet.style.transform = 'translateY(100%)';
+      setTimeout(() => { closeSheet(); sheet.style.transition = ''; sheet.style.transform = ''; }, 200);
+    } else {
+      sheet.style.transform = '';
+      setTimeout(() => { sheet.style.transition = ''; }, 230);
+    }
+  };
+  sheet.addEventListener('touchend', end);
+  sheet.addEventListener('touchcancel', end);
+}
+
 function closeSheet() {
   if (openSheetId) $(openSheetId).hidden = true;
   openSheetId = null;
@@ -1637,6 +1674,7 @@ function init() {
   setTimeout(flushPending, 1500);
   $('libSettingsBtn').addEventListener('click', () => openSheet('settingsSheet'));
   $('scrim').addEventListener('click', closeSheet);
+  document.querySelectorAll('.sheet').forEach(enableSheetSwipe);
   document.querySelectorAll('.close-sheet').forEach((b) => b.addEventListener('click', closeSheet));
 
   $('text').addEventListener('click', (e) => {

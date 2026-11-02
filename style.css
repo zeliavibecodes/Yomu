@@ -344,6 +344,7 @@ svg.i { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-widt
   animation: rise 0.28s cubic-bezier(.2,.8,.2,1);
 }
 .sheet.tall { max-height: 88vh; }
+.sheet { overscroll-behavior: contain; }
 @keyframes rise { from { transform: translateY(40px); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .sheet, .scrim { animation: none; } .reader-bar { transition: none; } }
 .sheet-grip { width: 36px; height: 5px; border-radius: 3px; background: var(--fill-strong); margin: 2px auto 14px; }
