@@ -29,6 +29,8 @@ export async function load() {
   data = d;
 }
 
+// The same quiet cover tones as the library, picked from the title.
+const toneOf = (t) => { let h = 0; for (const ch of t) h = (h * 31 + ch.codePointAt(0)) >>> 0; return `tone-${h % 6}`; };
 const plotOf = (w) => data.plots[w.id];
 const levelOf = (w) => Object.keys(data.shelves).find((k) => data.shelves[k].includes(w.id));
 function minutes(chars) { return Math.max(1, Math.round(chars / (Y().speed.cpm || 150))); }
@@ -74,7 +76,7 @@ function card(w) {
   const p = plotOf(w);
   const fit = cachedFit(w.id);
   return `<button class="d-card" data-w="${w.id}">
-    <div class="book-cover"><div class="book-spine">${esc(w.title)}<span class="sa">${esc(w.author)}</span></div></div>
+    <div class="book-cover"><div class="book-spine ${toneOf(w.title)}">${esc(w.title)}<span class="sa">${esc(w.author)}</span></div></div>
     <div class="t">${esc(w.title)}</div>
     ${p ? `<div class="en">${esc(p[0])}</div>` : ''}
     <div class="m">${timeLabel(w.length)}</div>
@@ -132,7 +134,7 @@ export async function openWork(id) {
   const inLib = await Y().findAozoraBook(w.id);
   $('dDetail').innerHTML = `
     <div class="dhead">
-      <div class="book-cover"><div class="book-spine">${esc(w.title)}<span class="sa">${esc(w.author)}</span></div></div>
+      <div class="book-cover"><div class="book-spine ${toneOf(w.title)}">${esc(w.title)}<span class="sa">${esc(w.author)}</span></div></div>
       <div>
         <div class="dt">${esc(w.title)}</div>
         ${p ? `<div class="de">${esc(p[0])}</div>` : w.subtitle ? `<div class="de">${esc(w.subtitle)}</div>` : ''}

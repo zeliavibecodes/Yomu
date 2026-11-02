@@ -1498,6 +1498,25 @@ function show(screen) {
 let editing = false;
 const coverUrls = [];
 
+// Web novel titles often carry extras: 【書籍化】 notices, (Web版), and a long subtitle after 〜.
+function shortTitle(t) {
+  let s = String(t || '').replace(/[【\[［][^】\]］]*[】\]］]/g, ' ').replace(/[（(]\s*(?:web|ｗｅｂ)[^）)]*[）)]/gi, ' ');
+  s = s.replace(/[\s　]*[〜～~][^〜～~]*[〜～~]?[\s　]*$/, '').replace(/[\s　]*[―—－-]{1,2}[^―—－-]+[―—－-]{0,2}[\s　]*$/, '');
+  s = s.replace(/[\s　]+/g, ' ').trim();
+  return s.length >= 2 ? s : String(t || '').trim();
+}
+// A typeset cover for books without one: the title sized to fit, the author set apart,
+// where the book came from, and one of a few quiet tones picked from the title.
+function typesetCover(title, author, source) {
+  let h = 0;
+  for (const ch of title) h = (h * 31 + ch.codePointAt(0)) >>> 0;
+  const n = [...title].length;
+  const size = n <= 4 ? 'xl' : n <= 8 ? 'l' : n <= 14 ? 'm' : n <= 22 ? 's' : 'xs';
+  return `<div class="book-cover"><div class="book-spine tone-${h % 6} size-${size}"><span class="st">${esc(title)}</span>`
+    + `${author ? `<span class="sa">${esc(author)}</span>` : ''}${source ? `<span class="ss">${esc(source)}</span>` : ''}</div></div>`;
+}
+const sourceOf = (b) => (b.aozora ? '青空文庫' : (b.web?.site || (b.kakuyomu ? 'kakuyomu' : '')) === 'kakuyomu' ? 'カクヨム' : b.web?.site === 'narou' ? '小説家になろう' : '');
+
 async function renderShelf() {
   coverUrls.splice(0).forEach((u) => URL.revokeObjectURL(u));
   const books = (await db.all('books')).sort((a, b) => (b.lastOpened || b.added) - (a.lastOpened || a.added));
@@ -1516,11 +1535,12 @@ async function renderShelf() {
       const u = URL.createObjectURL(b.cover);
       coverUrls.push(u);
       cover = `<div class="book-cover"><img src="${u}" alt=""></div>`;
-    } else cover = `<div class="book-cover"><div class="book-spine">${esc(b.title)}${b.author ? `<span class="sa">${esc(b.author)}</span>` : ''}</div></div>`;
+    } else cover = typesetCover(b.web || b.kakuyomu ? shortTitle(b.title) : b.title, b.author, sourceOf(b));
+    const shown = b.web || b.kakuyomu ? shortTitle(b.title) : b.title;
     const pct = b.lastOpened ? Math.max(1, b.percent ?? Math.round(((b.chapter || 0) + 1) / (b.chapters || 1) * 100)) : 0;
     const prog = !b.lastOpened ? 'Not started' : pct >= 100 ? 'Finished' : `${pct}% read`;
     el.innerHTML = `<button class="book" data-open="${b.id}" aria-label="Open ${esc(b.title)}">${cover}
-      <div class="book-meta"><div class="t">${esc(b.title)}</div><div class="p">${b.lastOpened ? prog : esc(b.author || 'Not started')}</div>${pct ? `<div class="book-bar"><span style="width:${pct}%"></span></div>` : ''}</div></button>
+      <div class="book-meta"><div class="t">${esc(shown)}</div><div class="p">${b.lastOpened ? prog : esc(b.author || 'Not started')}</div>${pct ? `<div class="book-bar"><span style="width:${pct}%"></span></div>` : ''}</div></button>
       ${editing ? `<button class="book-remove" data-remove="${b.id}" aria-label="Remove ${esc(b.title)}">✕</button>` : ''}`;
     $('shelf').appendChild(el);
   }
