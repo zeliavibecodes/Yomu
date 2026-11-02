@@ -47,7 +47,19 @@ const passes = (w) => (!filters.modern || w.modern) && lengthOk(w);
 
 /* ---------- Screen ---------- */
 
+// Classics (Aozora) or web novels, remembered between visits.
+let source = 'aozora';
+try { source = localStorage.getItem('yomu.dsrc') || 'aozora'; } catch {}
+let webMod = null;
+
 export async function render() {
+  document.querySelectorAll('#dSrc button').forEach((b) => b.classList.toggle('on', b.dataset.src === source));
+  $('aozoraView').hidden = source !== 'aozora';
+  $('webView').hidden = source !== 'web';
+  if (source === 'web') {
+    if (!webMod) { webMod = await import('./webdiscover.js'); webMod.init(); }
+    return webMod.render();
+  }
   const root = $('discoverBody');
   if (!catalog) {
     root.innerHTML = '<p class="hint d-loading">Loading the Aozora Bunko catalog…</p>';
@@ -372,6 +384,13 @@ async function makeEpub(w, t) {
 /* ---------- Wiring ---------- */
 
 export function init() {
+  $('dSrc').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-src]');
+    if (!b || b.dataset.src === source) return;
+    source = b.dataset.src;
+    try { localStorage.setItem('yomu.dsrc', source); } catch {}
+    render();
+  });
   let timer;
   $('dSearch').addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(render, 200); });
   document.querySelectorAll('#dChips [data-f]').forEach((chip) => chip.addEventListener('click', () => {

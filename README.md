@@ -55,14 +55,16 @@ Switch from **Library** to **Discover** at the top of the first screen to find f
 - **Tap a book** to see its English title, a short plot summary in English (for about 380 of the most-read works), the opening lines, and how many of its words you already know on jpdb. Then add it to your library in one tap.
 - Reading times use your own reading speed, so they get more accurate as you read.
 
-## Kakuyomu
+## Web novels
 
-Tap **Add book → Story from Kakuyomu** and paste a story's link from kakuyomu.jp (カクヨム), a free site for modern web novels.
+Discover has two parts: **Classics** (Aozora Bunko) and **Web novels**, from Kakuyomu (カクヨム) and Narou (小説家になろう), two free sites where people publish modern novels.
 
-- Yomu downloads the first 10 episodes. At the end of the last one, **Get the next 10 episodes** fetches more. For stories still being written, **Check for new episodes** picks up new ones.
+- **Pick a mood, a genre, or both.** Moods come from the tags authors put on their stories: Gentle, Funny, Moving, Gripping. "Gentle + Sci-fi" finds soft sci-fi; "Funny + Fantasy" finds comedic fantasy.
+- **Easiest for you first.** Yomu checks each story's first episode against your jpdb words and shows how many you already know: Comfortable (90% or more), A stretch (80–89%), or Hard. Scores are rechecked every two weeks, as your decks grow.
+- **Add a story** from its details, or paste a link under **Add book → Web novel link**. Yomu downloads the first 10 episodes, then more whenever you reach the end.
 - Episodes are downloaded slowly, one at a time, and kept only on your phone, for your own reading. Nothing is saved to GitHub.
-- The author's own readings and emphasis dots are kept.
-- Kakuyomu doesn't let other websites read its pages, so Yomu goes through a small relay: `serve.py` on the Mac, or a free Cloudflare Worker online (see `relay/README.md`).
+- The authors' own readings and emphasis dots are kept.
+- Neither site lets other websites read its pages, so Yomu goes through a small relay: `serve.py` on the Mac, or a free Cloudflare Worker online (see `relay/README.md`).
 
 ## Testing on the Mac
 
@@ -94,4 +96,4 @@ Claude saves changes straight to this GitHub repository. The app picks them up t
 
 ## Credits
 
-Dictionary data from JMdict by the Electronic Dictionary Research and Development Group (CC BY-SA 4.0). Word splitting by kuromoji.js with the IPADIC dictionary (Apache 2.0). Readings and decks by jpdb.io. Books from Aozora Bunko, fetched through the aozorahack copy on GitHub. Stories from Kakuyomu belong to their authors.
+Dictionary data from JMdict by the Electronic Dictionary Research and Development Group (CC BY-SA 4.0). Word splitting by kuromoji.js with the IPADIC dictionary (Apache 2.0). Readings and decks by jpdb.io. Books from Aozora Bunko, fetched through the aozorahack copy on GitHub. Web novels from Kakuyomu and Narou belong to their authors.

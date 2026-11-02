@@ -4,13 +4,19 @@
 Run it from the yomu folder:   python3 serve.py
 Then open the address it prints on the iPhone.
 
-Besides the app's files, it passes on Kakuyomu story pages at /relay, the same
-way the online relay does (relay/worker.js), so "Add from Kakuyomu" works locally.
+Besides the app's files, it passes on Kakuyomu and Narou pages at /relay, the same
+way the online relay does (relay/worker.js), so web novels work locally.
 """
 import http.server, re, socket, socketserver, sys, urllib.error, urllib.parse, urllib.request
 
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8000
-ALLOWED = re.compile(r"^/works/\d+(/episodes/\d+)?$")
+# The only pages the relay will fetch: stories, episodes and searches on the two sites.
+ALLOWED = [
+    re.compile(r"^https://kakuyomu\.jp/works/\d+(/episodes/\d+)?$"),
+    re.compile(r"^https://kakuyomu\.jp/search\?[^#]*$"),
+    re.compile(r"^https://ncode\.syosetu\.com/n[0-9a-z]+/(\d+/)?$"),
+    re.compile(r"^https://api\.syosetu\.com/novelapi/api/\?[^#]*$"),
+]
 AGENT = "Yomu personal reader (one reader, one episode at a time)"
 
 
@@ -18,14 +24,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         url = urllib.parse.urlparse(self.path)
         if url.path.rstrip("/").endswith("/relay"):
-            return self.relay(urllib.parse.parse_qs(url.query).get("path", [""])[0])
+            return self.relay(urllib.parse.parse_qs(url.query).get("url", [""])[0])
         return super().do_GET()
 
-    def relay(self, path):
-        if not ALLOWED.match(path):
-            return self.send_error(400, "Only Kakuyomu story pages can be fetched.")
+    def relay(self, target):
+        if not any(r.match(target) for r in ALLOWED):
+            return self.send_error(400, "Only Kakuyomu and Narou story pages can be fetched.")
         try:
-            req = urllib.request.Request("https://kakuyomu.jp" + path, headers={"User-Agent": AGENT})
+            req = urllib.request.Request(target, headers={"User-Agent": AGENT})
             with urllib.request.urlopen(req, timeout=20) as r:
                 body = r.read()
         except urllib.error.HTTPError as e:

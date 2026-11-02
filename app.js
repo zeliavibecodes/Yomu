@@ -990,9 +990,9 @@ async function buildChapter(index, { images = true } = {}) {
   // Footer: next chapter
   const end = document.createElement('div');
   end.className = 'chapter-end';
-  const kk = reader.book.kakuyomu;
+  const kk = reader.book.web || reader.book.kakuyomu;
   if (index < reader.epub.spine.length - 1) end.innerHTML = '<button class="btn" id="nextChapter">Next chapter</button>';
-  else if (kk && kk.have < kk.total) end.innerHTML = `<div class="more"><button class="btn" id="moreEpisodes">Get the next ${Math.min(10, kk.total - kk.have)} episodes</button><p class="hint" id="moreMsg">${kk.total - kk.have} more on Kakuyomu</p></div>`;
+  else if (kk && kk.have < kk.total) end.innerHTML = `<div class="more"><button class="btn" id="moreEpisodes">Get the next ${Math.min(10, kk.total - kk.have)} episodes</button><p class="hint" id="moreMsg">${kk.total - kk.have} more on ${(kk.site || 'kakuyomu') === 'narou' ? 'Narou' : 'Kakuyomu'}</p></div>`;
   else if (kk && !kk.finished) end.innerHTML = '<div class="more"><button class="btn" id="moreEpisodes">Check for new episodes</button><p class="hint" id="moreMsg">The author is still writing this story.</p></div>';
   else end.innerHTML = '<span class="hint">End of the book</span>';
   root.appendChild(end);
@@ -1420,7 +1420,7 @@ function tapZone(x) {
 }
 // Library and Discover share the first screen; the large title switches between them.
 let discoverMod = null;
-let kakuyomuMod = null;
+let webMod = null;
 async function showTab(tab) {
   const disc = tab === 'discover';
   $('libraryView').hidden = disc;
@@ -1484,9 +1484,9 @@ async function addBookBuffer(buf, extra = {}) {
   renderShelf();
   return id;
 }
-async function findKakuyomuBook(workId) {
+async function findWebBook(site, work) {
   const books = await db.all('books');
-  return books.find((b) => b.kakuyomu?.work === workId)?.id || null;
+  return books.find((b) => (b.web ? b.web.site === site && b.web.work === work : site === 'kakuyomu' && b.kakuyomu?.work === work))?.id || null;
 }
 
 // Download the next episodes of the Kakuyomu story that's open, then carry on reading.
@@ -1496,12 +1496,12 @@ async function moreEpisodes() {
   btn.disabled = true;
   const rec = reader.book, at = reader.chapter;
   try {
-    const kk = await import('./kakuyomu.js');
+    const kk = await import('./webnovel.js');
     const res = await kk.getMore(rec, await db.get('files', rec.id), say);
     if (!res.added) {
       await db.put('books', res.rec);
       reader.book = res.rec;
-      say(res.rec.kakuyomu.finished ? 'This is the end of the story.' : 'No new episodes yet.');
+      say(res.rec.web.finished ? 'This is the end of the story.' : 'No new episodes yet.');
       btn.disabled = false;
       return;
     }
@@ -1578,8 +1578,8 @@ function init() {
 
   $('fileInput').addEventListener('change', (e) => { closeSheet(); addBookFile(e.target.files[0]); e.target.value = ''; });
   $('addBookBtn').addEventListener('click', async () => {
-    if (!kakuyomuMod) { kakuyomuMod = await import('./kakuyomu.js'); kakuyomuMod.init(); }
-    kakuyomuMod.resetSheet();
+    if (!webMod) { webMod = await import('./webnovel.js'); webMod.init(); }
+    webMod.resetSheet();
     openSheet('addSheet');
   });
   $('editBtn').addEventListener('click', () => { editing = !editing; renderShelf(); });
@@ -1715,7 +1715,7 @@ function init() {
 // Shared with the Discover screen (discover.js).
 window.yomu = {
   get settings() { return settings; }, speed, vocab, parseTexts, toast, openSheet, closeSheet,
-  addBookBuffer, findAozoraBook, findKakuyomuBook, openBook,
+  addBookBuffer, findAozoraBook, findWebBook, openBook,
 };
 
 init();
