@@ -65,7 +65,7 @@ Discover has two parts: **Classics** (Aozora Bunko) and **Web novels**, from Kak
 - **Saved:** tap the bookmark on any story, or **Save for later** on its details page, to keep it in the Saved list. Saved stories stay on this phone.
 - **Reader signals:** each card shows how much readers like the story (Loved by many, Popular, Liked, Some readers, Few readers yet), and the details page shows ratings, followers and translated reader reviews.
 - **English:** with a Gemini key on the Vercel relay, cards show an English title and one-line description, and the details page an English summary.
-- **Add a story** from its details. To check a story you found elsewhere, paste its link under **Add book → Web novel link** and tap **Look up**: you get the same details page (difficulty, English summary, what readers say), with Add to library and Save for later. Yomu downloads the first 10 episodes, then more whenever you reach the end.
+- **Add a story** from its details. To check a story you found elsewhere, paste its link (or a Kakuyomu search link, or just type its title) under **Add book → Web novel** and tap **Look up**: you get the same details page (difficulty, English summary, what readers say), with Add to library and Save for later. Yomu downloads the first 10 episodes, then more whenever you reach the end.
 - Episodes are downloaded slowly, one at a time, and kept only on your phone, for your own reading. Nothing is saved to GitHub.
 - The authors' own readings and emphasis dots are kept.
 - Neither site lets other websites read its pages, so Yomu goes through a small relay: `serve.py` on the Mac, or a free Cloudflare Worker online (see `relay/README.md`).

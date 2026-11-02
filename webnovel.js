@@ -331,22 +331,43 @@ export function init() {
   // where you can add it to your library or save it for later.
   $('kkAdd').addEventListener('click', async () => {
     const btn = $('kkAdd'), say = (t) => ($('kkMsg').textContent = t);
+    const input = $('kkLink').value.trim();
+    if (!input) return say('Paste a link, or type a title.');
     btn.disabled = true;
-    say('Looking up the story…');
+    $('kkResults').innerHTML = '';
     try {
-      const story = await storyFromLink($('kkLink').value);
       const wd = await import(`./webdiscover.js${new URL(import.meta.url).search}`);
-      resetSheet();
-      wd.previewStory(story);
+      if (parseLink(input)) {
+        say('Looking up the story…');
+        const story = await storyFromLink(input);
+        resetSheet();
+        return wd.previewStory(story);
+      }
+      // Not a story link: a Kakuyomu search link, or words typed in. Search Kakuyomu for them.
+      let q = input;
+      try { const u = new URL(input); if (/kakuyomu\.jp$/.test(u.hostname)) q = u.searchParams.get('q') || ''; else q = ''; } catch {}
+      if (!q) return say('Paste a link to a story on kakuyomu.jp or syosetu.com, or type a title.');
+      say(`Searching Kakuyomu for “${q}”…`);
+      const found = (await kkSearch({ query: q })).slice(0, 8);
+      if (!found.length) return say(`Nothing found on Kakuyomu for “${q}”.`);
+      if (found.length === 1) { resetSheet(); return wd.previewStory(found[0]); }
+      say('Pick a story:');
+      $('kkResults').innerHTML = found.map((s, i) => `<li><button data-i="${i}"><span class="t">${esc(wd.shortTitle(s.title))}</span><span class="a">${esc(s.author)}${s.genre ? ' · ' + esc(s.genre) : ''}</span></button></li>`).join('');
+      $('kkResults').onclick = (e) => {
+        const b = e.target.closest('[data-i]');
+        if (b) { const s = found[+b.dataset.i]; resetSheet(); wd.previewStory(s); }
+      };
     } catch (e) {
       say(e.message || 'Something went wrong.');
     } finally {
       btn.disabled = false;
     }
   });
+  $('kkLink').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $('kkAdd').click(); } });
 }
 
 export function resetSheet(keepLink = false) {
   if (!keepLink) $('kkLink').value = '';
   $('kkMsg').textContent = '';
+  $('kkResults').innerHTML = '';
 }
