@@ -991,6 +991,17 @@ async function buildChapter(index, { images = true } = {}) {
   }
   root.appendChild(frag2);
 
+  // Web novels put a blank line between almost every paragraph, which suits scrolling on a
+  // phone but becomes a wide empty column on a book page. Drop single blank lines and keep
+  // one for longer runs, where the author means a scene break.
+  if (reader.book?.web || reader.book?.kakuyomu) {
+    const blank = (el) => el.localName === 'p' && !el.textContent.trim() && !el.querySelector('img,svg,image');
+    let run = [];
+    const flush = () => { if (run.length === 1) run[0].remove(); else run.slice(1).forEach((x) => x.remove()); run = []; };
+    for (const el of Array.from(root.children)) { if (blank(el)) run.push(el); else flush(); }
+    flush();
+  }
+
   // Footer: next chapter
   const end = document.createElement('div');
   end.className = 'chapter-end';
