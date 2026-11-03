@@ -43,7 +43,7 @@ export async function start() {
 
 function learnedLine() {
   const ok = session.done - session.notTaken;
-  const okText = `${ok} ${ok === 1 ? 'word is' : 'words are'} now learning on jpdb.`;
+  const okText = `${ok} ${ok === 1 ? 'word is' : 'words are'} now in your jpdb reviews.`;
   return session.notTaken ? `${ok ? okText + ' ' : ''}jpdb didn’t start ${session.notTaken} ${session.notTaken === 1 ? 'word' : 'words'}, so ${session.notTaken === 1 ? 'it’s' : 'they’re'} kept here for next time.` : okText;
 }
 
