@@ -29,17 +29,15 @@ export async function start() {
   if (!list.length) return Y().toast('No new words to learn.');
   Y().openSheet('learnSheet');
   $('learnBody').innerHTML = '<p class="hint d-loading">Checking your words on jpdb…</p>';
-  // Words jpdb has locked until their kanji are learned can't be studied yet, and words already
-  // learned on jpdb don't need a card here.
+  // Words already learned on jpdb don't need a card here. Words jpdb lists as locked (kanji not
+  // learned yet) stay in the session and are marked, so you can see whether jpdb takes them.
   const st = await states(list);
-  let locked = [];
   if (st) {
     for (const it of list) if (!isNew(st.get(key(it)))) Y().learned(it);
     list = Y().learnList();
-    locked = list.filter((it) => isLocked(st.get(key(it))));
-    list = list.filter((it) => !isLocked(st.get(key(it))));
+    for (const it of list) it.lockedOnJpdb = isLocked(st.get(key(it)));
   }
-  Object.assign(session, { queue: [...list], done: 0, total: list.length, again: new Set(), shown: false, busy: false, locked, notTaken: 0 });
+  Object.assign(session, { queue: [...list], done: 0, total: list.length, again: new Set(), shown: false, busy: false, locked: [], notTaken: 0 });
   render();
 }
 
@@ -80,6 +78,7 @@ function render() {
       <ruby class="ln-word">${esc(it.spelling)}<rt>${session.shown || !session.again.has(key(it)) ? esc(reading) : ''}</rt></ruby>
       ${sentence ? `<p class="ln-sentence">${sentence}</p>` : ''}
       ${it.book ? `<p class="ln-book">From ${esc(it.book)}</p>` : ''}
+      ${it.lockedOnJpdb ? '<p class="ln-book">jpdb lists this word as locked</p>' : ''}
     </div>
     ${session.shown ? `
       <ol class="meanings ln-meanings">${(it.meanings || []).slice(0, 3).map((m) => `<li>${esc(m.g.join('; '))}</li>`).join('')}</ol>
