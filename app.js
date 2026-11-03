@@ -310,8 +310,35 @@ function textWithRubies(text, a, b, rubies, cls) {
 
 // Mark each word jpdb found, in place, so the book's own formatting
 // (emphasis dots, upright numbers, its printed readings) stays intact.
+// Words jpdb leaves out (mostly names like 悠人) still get a tappable span,
+// so tapping them opens a card instead of turning the page.
+const GAP_RUN = /[\u3400-\u9fff\uf900-\ufaff々〆ヵヶ\u30a1-\u30fa\u30fc]+/g;
+function gapTokens(text, tokens) {
+  const covered = new Uint8Array(text.length);
+  for (const t of tokens) covered.fill(1, t.start, t.end);
+  const out = [];
+  for (const m of text.matchAll(GAP_RUN)) {
+    let i = m.index;
+    const end = m.index + m[0].length;
+    while (i < end) {
+      while (i < end && covered[i]) i++;
+      let j = i;
+      while (j < end && !covered[j]) j++;
+      const surface = text.slice(i, j);
+      if (j > i && /[^ー]/.test(surface)) {
+        const key = 'gap:' + surface;
+        if (!vocab.has(key)) vocab.set(key, { key, spelling: surface, reading: '', meanings: [], state: null, gap: true });
+        out.push({ key, start: i, end: j, rubies: [] });
+      }
+      i = j;
+    }
+  }
+  return out;
+}
+
 function wrapTokens(data, tokens) {
   const { text, segs, rubies } = data;
+  tokens = [...tokens, ...gapTokens(text, tokens)].sort((x, y) => x.start - y.start);
   for (let ti = tokens.length - 1; ti >= 0; ti--) {
     const t = tokens[ti];
     const parts = segs.filter((sg) => sg.start < t.end && sg.end > t.start);
@@ -329,7 +356,7 @@ function wrapTokens(data, tokens) {
       if (b < node.nodeValue.length) node.splitText(b);
       const mid = a > 0 ? node.splitText(a) : node;
       const span = document.createElement('span');
-      span.className = 'w ' + stateClass(v?.state);
+      span.className = 'w ' + (v?.gap ? 'st-gap' : stateClass(v?.state));
       span.dataset.k = t.key;
       span.dataset.s = t.start;
       span.dataset.e = t.end;
@@ -1436,7 +1463,36 @@ function openWord(el) {
   $('addBtn').disabled = false;
   $('knownBtn').disabled = false;
   $('wMsg').textContent = '';
+  if (v.gap) openGap(v);
   openSheet('wordSheet');
+}
+
+// A word jpdb doesn't have, usually a name. Use the book's own reading and the
+// offline dictionary when they help; it can't go into a jpdb deck.
+async function openGap(v) {
+  const el = current.el;
+  const rt = el.closest('ruby')?.querySelector('rt') || el.querySelector('rt');
+  $('wReading').textContent = rt?.textContent || '';
+  $('wState').textContent = 'Not in jpdb · often a name';
+  $('wState').className = 'word-state none';
+  $('addBtn').disabled = true;
+  $('knownBtn').disabled = true;
+  $('wMeanings').innerHTML = '';
+  if (!dict.available) {
+    $('wMsg').textContent = 'jpdb has no entry for this word, so it can’t be added to a deck. “Explain this sentence” can tell you who or what it is.';
+    return;
+  }
+  try {
+    const od = await dictModule();
+    await od.ready();
+    const e = od.lookup(v.spelling);
+    if (current?.v !== v) return;
+    if (!e) { $('wMsg').textContent = 'jpdb and the offline dictionary have no entry for this word. “Explain this sentence” can tell you who or what it is.'; return; }
+    if (!$('wReading').textContent && e.reading !== v.spelling) $('wReading').textContent = e.reading;
+    $('wMeanings').innerHTML = e.meanings.slice(0, 5).map((m) =>
+      `<li>${esc(m.g.join('; '))}${m.pos.length ? `<span class="pos">${esc(m.pos.join(', '))}</span>` : ''}</li>`).join('');
+    $('wMsg').textContent = 'From the offline dictionary. jpdb has no entry, so it can’t be added to a deck.';
+  } catch {}
 }
 
 function updateWordEverywhere(v) {
