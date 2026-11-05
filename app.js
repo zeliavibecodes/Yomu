@@ -12,7 +12,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 /* =========================================================
    Settings (small values, kept in localStorage)
    ========================================================= */
-const DEFAULTS = { key: '', deck: '', furigana: 'unknown', direction: 'vertical', size: 19, sentence: true, theme: 'auto', font: 'mincho', underline: false, animate: true, ghToken: '', gistId: '' };
+const DEFAULTS = { key: '', deck: '', furigana: 'unknown', direction: 'vertical', size: 19, sentence: true, theme: 'auto', font: 'mincho', underline: false, animate: true, awake: true, ghToken: '', gistId: '' };
 const settings = { ...DEFAULTS };
 if (matchMedia('(prefers-reduced-motion: reduce)').matches) settings.animate = false;
 try { Object.assign(settings, JSON.parse(localStorage.getItem('yomu.settings') || '{}')); } catch {}
@@ -38,6 +38,7 @@ function applySettings() {
   $('sentenceToggle').checked = settings.sentence;
   $('marksToggle').checked = settings.underline;
   $('animateToggle').checked = settings.animate;
+  $('awakeToggle').checked = settings.awake;
   $('keyNotice').hidden = !!settings.key;
 }
 
@@ -1665,7 +1666,25 @@ function show(screen) {
   $('library').hidden = screen !== 'library';
   $('reader').hidden = screen !== 'reader';
   $('readerBar').classList.remove('hide');
+  keepAwake();
 }
+
+/* =========================================================
+   Keep the screen on while reading
+   The phone lets go of this whenever Yomu goes to the background,
+   so it is asked for again each time you come back to the book.
+   ========================================================= */
+let wakeLock = null;
+async function keepAwake() {
+  const want = settings.awake && !$('reader').hidden && document.visibilityState === 'visible';
+  if (!want) { wakeLock?.release().catch(() => {}); wakeLock = null; return; }
+  if (wakeLock || !('wakeLock' in navigator)) return;
+  try {
+    wakeLock = await navigator.wakeLock.request('screen');
+    wakeLock.addEventListener('release', () => { wakeLock = null; });
+  } catch { wakeLock = null; }
+}
+document.addEventListener('visibilitychange', keepAwake);
 
 /* =========================================================
    Library
@@ -1979,6 +1998,7 @@ function init() {
   $('sentenceToggle').addEventListener('change', (e) => { settings.sentence = e.target.checked; saveSettings(); });
   $('marksToggle').addEventListener('change', (e) => { settings.underline = e.target.checked; saveSettings(); });
   $('animateToggle').addEventListener('change', (e) => { settings.animate = e.target.checked; saveSettings(); });
+  $('awakeToggle').addEventListener('change', (e) => { settings.awake = e.target.checked; saveSettings(); keepAwake(); });
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') return closeSheet();
