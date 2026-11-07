@@ -1041,7 +1041,7 @@ async function buildChapter(index, { images = true } = {}) {
   if (index < reader.epub.spine.length - 1) end.innerHTML = '<button class="btn" id="nextChapter">Next chapter</button>';
   else if (kk && kk.have < kk.total) end.innerHTML = `<div class="more"><button class="btn" id="moreEpisodes">Get the next ${Math.min(10, kk.total - kk.have)} episodes</button><p class="hint" id="moreMsg">${kk.total - kk.have} more on ${(kk.site || 'kakuyomu') === 'narou' ? 'Narou' : 'Kakuyomu'}</p></div>`;
   else if (kk && !kk.finished) end.innerHTML = '<div class="more"><button class="btn" id="moreEpisodes">Check for new episodes</button><p class="hint" id="moreMsg">The author is still writing this story.</p></div>';
-  else end.innerHTML = '<span class="hint">End of the book</span>';
+  else end.innerHTML = finishHtml(reader.book);
   // Learn the words added while reading, right after the chapter.
   const learnN = learnList().length;
   end.insertAdjacentHTML('afterbegin', `<button class="btn primary chapter-learn" id="chapterLearn" ${learnN ? '' : 'hidden'}>Learn ${learnN} new word${learnN === 1 ? '' : 's'}</button>`);
@@ -1736,9 +1736,67 @@ async function fillCovers(books) {
   renderShelf();
 }
 
+/* =========================================================
+   Finished books
+   Tapping "Mark as finished" on the last page saves the date, moves the book
+   to the Finished part of the library, and logs it in Hibi (same GitHub key).
+   ========================================================= */
+const dayKey = (t) => { const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+const niceDate = (t) => new Date(t).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+function finishHtml(rec) {
+  return rec?.finished
+    ? `<div class="more"><p class="hint">Finished on ${niceDate(rec.finished)}</p><button class="text-btn" id="unfinishBook">Not finished yet</button></div>`
+    : '<div class="more"><button class="btn" id="finishBook">Mark as finished</button><p class="hint">End of the book</p></div>';
+}
+async function setFinished(on) {
+  const rec = reader.book;
+  if (!rec) return;
+  if (on) { rec.finished = Date.now(); rec.percent = 100; } else delete rec.finished;
+  rec.hibiPending = true;
+  await db.put('books', rec);
+  const end = $('text').querySelector('.chapter-end .more, .chapter-end > .hint');
+  if (end) end.outerHTML = finishHtml(rec);
+  toast(on ? 'Finished. Nice work.' : 'Back to your reading list.');
+  sendToHibi(rec);
+}
+// Hibi keeps its entries in its own private Gist; Yomu adds or removes one entry per book.
+const HIBI_FILE = 'hibi-sync.json';
+async function sendToHibi(rec) {
+  if (!settings.ghToken || !navigator.onLine) return;
+  try {
+    let id = settings.hibiGistId;
+    if (!id) {
+      const gists = await gh('GET', '/gists?per_page=100');
+      id = gists.find((x) => x.files && x.files[HIBI_FILE])?.id;
+      if (!id) return;   // Hibi isn't connected to GitHub yet
+      settings.hibiGistId = id; saveSettings();
+    }
+    const g = await gh('GET', '/gists/' + id);
+    let data = {};
+    try { data = JSON.parse(g.files[HIBI_FILE]?.content || '{}'); } catch {}
+    data.entries = (data.entries || []).filter((e) => e.id !== 'yomu-' + rec.id);
+    data.deleted = data.deleted || {};
+    const now = Date.now();
+    if (rec.finished) {
+      data.entries.push({ id: 'yomu-' + rec.id, t: now, d: dayKey(rec.finished), c: 'jp-novel', title: rec.web || rec.kakuyomu ? shortTitle(rec.title) : rec.title });
+      delete data.deleted['yomu-' + rec.id];
+    } else data.deleted['yomu-' + rec.id] = now;
+    await gh('PATCH', '/gists/' + id, { files: { [HIBI_FILE]: { content: JSON.stringify({ ...data, app: 'hibi', version: 1 }) } } });
+    delete rec.hibiPending;
+    await db.put('books', rec);
+  } catch (e) { if (e.status === 404) { settings.hibiGistId = ''; saveSettings(); } }
+}
+// Anything that couldn't reach Hibi (offline) goes when the app next opens.
+async function sendPendingToHibi() {
+  for (const b of await db.all('books')) if (b.hibiPending) await sendToHibi(b);
+}
+
 async function renderShelf() {
   coverUrls.splice(0).forEach((u) => URL.revokeObjectURL(u));
-  const books = (await db.all('books')).sort((a, b) => (b.lastOpened || b.added) - (a.lastOpened || a.added));
+  const all = await db.all('books');
+  const reading = all.filter((b) => !b.finished).sort((a, b) => (b.lastOpened || b.added) - (a.lastOpened || a.added));
+  const done = all.filter((b) => b.finished).sort((a, b) => b.finished - a.finished);
+  const books = [...reading, ...done];
   $('emptyShelf').hidden = books.length > 0;
   $('libSub').textContent = books.length ? `${books.length} ${books.length === 1 ? 'book' : 'books'}` : '';
   $('libSub').parentElement.hidden = !books.length;
@@ -1747,6 +1805,7 @@ async function renderShelf() {
   $('editBtn').textContent = editing ? 'Done' : 'Edit';
   $('shelf').innerHTML = '';
   for (const b of books) {
+    if (b === done[0]) $('shelf').insertAdjacentHTML('beforeend', `<p class="shelf-head">Finished · ${done.length}</p>`);
     const el = document.createElement('div');
     el.className = 'book-item';
     let cover;
@@ -1757,9 +1816,9 @@ async function renderShelf() {
     } else cover = typesetCover(b.web || b.kakuyomu ? shortTitle(b.title) : b.title, b.author, sourceOf(b), b.color);
     const shown = b.web || b.kakuyomu ? shortTitle(b.title) : b.title;
     const pct = b.lastOpened ? Math.max(1, b.percent ?? Math.round(((b.chapter || 0) + 1) / (b.chapters || 1) * 100)) : 0;
-    const prog = !b.lastOpened ? 'Not started' : pct >= 100 ? 'Finished' : `${pct}% read`;
+    const prog = b.finished ? niceDate(b.finished) : !b.lastOpened ? 'Not started' : `${pct}% read`;
     el.innerHTML = `<button class="book" data-open="${b.id}" aria-label="Open ${esc(b.title)}">${cover}
-      <div class="book-meta"><div class="t">${esc(shown)}</div><div class="p">${b.lastOpened ? prog : esc(b.author || 'Not started')}</div>${pct ? `<div class="book-bar"><span style="width:${pct}%"></span></div>` : ''}</div></button>
+      <div class="book-meta"><div class="t">${esc(shown)}</div><div class="p">${b.lastOpened || b.finished ? prog : esc(b.author || 'Not started')}</div>${pct && !b.finished ? `<div class="book-bar"><span style="width:${pct}%"></span></div>` : ''}</div></button>
       ${editing ? `<button class="book-remove" data-remove="${b.id}" aria-label="Remove ${esc(b.title)}">✕</button>` : ''}`;
     $('shelf').appendChild(el);
   }
@@ -1942,6 +2001,8 @@ function init() {
     if (e.target.closest('#nextChapter')) return loadChapter(reader.chapter + 1);
     if (e.target.closest('#chapterLearn')) return startLearning();
     if (e.target.closest('#moreEpisodes')) return moreEpisodes();
+    if (e.target.closest('#finishBook')) return setFinished(true);
+    if (e.target.closest('#unfinishBook')) return setFinished(false);
     const link = e.target.closest('[data-target]');
     if (link) {
       const t = link.dataset.target;
@@ -2012,6 +2073,7 @@ function init() {
 
   // Ask the browser to keep stored books even when space runs low.
   navigator.storage?.persist?.().catch(() => {});
+  sendPendingToHibi();
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 
   renderShelf();
