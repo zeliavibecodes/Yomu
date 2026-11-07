@@ -523,6 +523,8 @@ async function openBook(id) {
 
 function closeBook() {
   // Save where you are now, so the library shows today's progress.
+  tickReading(false);
+  sendReadingTime();
   if (reader.book) { clearTimeout(saveTimer); reader.book.chapter = reader.chapter; reader.book.percent = bookPercent(); db.put('books', reader.book); }
   cssCache.clear();
   reader.stopped = true;
@@ -816,6 +818,7 @@ function notePageTime() {
       }
     }
   }
+  tickReading();
   speed.shownAt = now; speed.page = pager.page; speed.chapter = reader.chapter;
 }
 function pageOf(node) {
@@ -1773,34 +1776,87 @@ async function setFinished(on) {
 }
 // Hibi keeps its entries in its own private Gist; Yomu adds or removes one entry per book.
 const HIBI_FILE = 'hibi-sync.json';
+// Load Hibi's entries, let `change` edit them, and save them back if anything changed.
+// Runs one at a time so two updates never overwrite each other.
+let hibiChain = Promise.resolve();
+function hibiUpdate(change) {
+  const run = async () => {
+    if (!settings.ghToken || !navigator.onLine) return false;
+    try {
+      let id = settings.hibiGistId;
+      if (!id) {
+        const gists = await gh('GET', '/gists?per_page=100');
+        id = gists.find((x) => x.files && x.files[HIBI_FILE])?.id;
+        if (!id) return false;   // Hibi isn't connected to GitHub yet
+        settings.hibiGistId = id; saveSettings();
+      }
+      const g = await gh('GET', '/gists/' + id);
+      let data = {};
+      try { data = JSON.parse(g.files[HIBI_FILE]?.content || '{}'); } catch {}
+      data.entries = data.entries || [];
+      data.deleted = data.deleted || {};
+      if (change(data) === false) return true;   // nothing to save
+      await gh('PATCH', '/gists/' + id, { files: { [HIBI_FILE]: { content: JSON.stringify({ ...data, app: 'hibi', version: 1 }) } } });
+      return true;
+    } catch (e) { if (e.status === 404) { settings.hibiGistId = ''; saveSettings(); } return false; }
+  };
+  return (hibiChain = hibiChain.then(run, run));
+}
 async function sendToHibi(rec) {
-  if (!settings.ghToken || !navigator.onLine) return;
-  try {
-    let id = settings.hibiGistId;
-    if (!id) {
-      const gists = await gh('GET', '/gists?per_page=100');
-      id = gists.find((x) => x.files && x.files[HIBI_FILE])?.id;
-      if (!id) return;   // Hibi isn't connected to GitHub yet
-      settings.hibiGistId = id; saveSettings();
-    }
-    const g = await gh('GET', '/gists/' + id);
-    let data = {};
-    try { data = JSON.parse(g.files[HIBI_FILE]?.content || '{}'); } catch {}
-    data.entries = (data.entries || []).filter((e) => e.id !== 'yomu-' + rec.id);
-    data.deleted = data.deleted || {};
+  const key = 'yomu-' + rec.id;
+  const ok = await hibiUpdate((data) => {
+    data.entries = data.entries.filter((e) => e.id !== key);
     const now = Date.now();
     if (rec.finished) {
-      data.entries.push({ id: 'yomu-' + rec.id, t: now, d: dayKey(rec.finished), c: 'jp-novel', title: rec.web || rec.kakuyomu ? shortTitle(rec.title) : rec.title });
-      delete data.deleted['yomu-' + rec.id];
-    } else data.deleted['yomu-' + rec.id] = now;
-    await gh('PATCH', '/gists/' + id, { files: { [HIBI_FILE]: { content: JSON.stringify({ ...data, app: 'hibi', version: 1 }) } } });
-    delete rec.hibiPending;
-    await db.put('books', rec);
-  } catch (e) { if (e.status === 404) { settings.hibiGistId = ''; saveSettings(); } }
+      data.entries.push({ id: key, t: now, d: dayKey(rec.finished), c: 'jp-novel', title: rec.web || rec.kakuyomu ? shortTitle(rec.title) : rec.title });
+      delete data.deleted[key];
+    } else data.deleted[key] = now;
+  });
+  if (!ok) return;
+  const latest = await db.get('books', rec.id);
+  if (latest) { delete latest.hibiPending; await db.put('books', latest); }
 }
 // Anything that couldn't reach Hibi (offline) goes when the app next opens.
 async function sendPendingToHibi() {
   for (const b of await db.all('books')) if (b.hibiPending) await sendToHibi(b);
+  sendReadingTime();
+}
+
+/* Reading time
+   Time on each page is added to today's total, at most 5 minutes per page so a book
+   left open doesn't count. Each day's total goes to Hibi as Japanese practice: Reading. */
+const readClock = { at: 0, sentAt: 0 };
+function readLog() { try { return JSON.parse(localStorage.getItem('yomu.readlog') || '{}'); } catch { return {}; } }
+function tickReading(keepGoing = true) {
+  const now = Date.now();
+  if (readClock.at && reader.book) {
+    const secs = Math.min(300, (now - readClock.at) / 1000);
+    const log = readLog(), day = dayKey(readClock.at);
+    log[day] = (log[day] || 0) + secs;
+    for (const d of Object.keys(log)) if (now - new Date(d).getTime() > 60 * 864e5) delete log[d];   // keep two months
+    try { localStorage.setItem('yomu.readlog', JSON.stringify(log)); } catch {}
+  }
+  readClock.at = keepGoing && reader.book && document.visibilityState === 'visible' ? now : 0;
+  if (now - readClock.sentAt > 5 * 60e3) sendReadingTime();   // while reading, update Hibi every few minutes
+}
+function sendReadingTime() {
+  readClock.sentAt = Date.now();
+  const log = readLog();
+  return hibiUpdate((data) => {
+    let changed = false;
+    for (const [day, secs] of Object.entries(log)) {
+      const m = Math.round(secs / 60);
+      if (m < 1) continue;
+      const id = `yomu-read-${deviceId}-${day}`;
+      if (data.deleted[id]) continue;   // you removed this day in Hibi
+      const old = data.entries.find((e) => e.id === id);
+      if (old && old.m === m) continue;
+      data.entries = data.entries.filter((e) => e.id !== id);
+      data.entries.push({ id, t: Date.now(), d: day, c: 'reading-time', m });
+      changed = true;
+    }
+    return changed;
+  });
 }
 
 async function renderShelf() {
@@ -1984,8 +2040,8 @@ function init() {
   $('offlineBtn').addEventListener('click', () => saveWholeBook());
   window.addEventListener('online', flushPending);
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') { flushPending(); checkRemoteWhileReading(); }
-    else pushPosition(true);   // leaving the app: save your place right away
+    if (document.visibilityState === 'visible') { flushPending(); checkRemoteWhileReading(); if (reader.book) readClock.at = Date.now(); }
+    else { pushPosition(true); tickReading(false); }   // leaving the app: save your place and reading time right away
   });
   $('ghConnectBtn').addEventListener('click', connectSync);
   $('dictBtn').addEventListener('click', toggleDict);
