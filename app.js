@@ -786,7 +786,8 @@ function bookPercent() {
   if (!L) return 0;
   const total = L.reduce((a, b) => a + b, 0) || 1;
   const before = L.slice(0, reader.chapter).reduce((a, b) => a + b, 0);
-  const within = (L[reader.chapter] || 0) * (pager.page / Math.max(1, pager.count));
+  // Count the page you're on as read, so the last page of the book shows 100%.
+  const within = (L[reader.chapter] || 0) * ((pager.page + 1) / Math.max(1, pager.count));
   return Math.min(100, Math.floor(((before + within) / total) * 100));
 }
 function showProgress() {
