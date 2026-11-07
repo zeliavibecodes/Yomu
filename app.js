@@ -522,6 +522,8 @@ async function openBook(id) {
 }
 
 function closeBook() {
+  // Save where you are now, so the library shows today's progress.
+  if (reader.book) { clearTimeout(saveTimer); reader.book.chapter = reader.chapter; reader.book.percent = bookPercent(); db.put('books', reader.book); }
   cssCache.clear();
   reader.stopped = true;
   reader.observer?.disconnect();
@@ -629,8 +631,9 @@ async function saveWholeBook() {
       }
       if (isOpen()) saveCacheSoon(); else await db.put('parsed', record, key);
     }
-    book.offline = true;
-    await db.put('books', book);
+    // Re-read the book first: you may have kept reading (or finished it) while this ran.
+    const latest = await db.get('books', book.id);
+    if (latest) await db.put('books', { ...latest, offline: true });
     toast('The whole book is saved for offline reading.');
   } catch (e) {
     toast(e.code === 'offline' ? "You're offline. Saving will continue next time." : 'Saving stopped: ' + e.message);
