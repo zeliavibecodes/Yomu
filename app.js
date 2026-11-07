@@ -797,6 +797,7 @@ function showProgress() {
   const mins = Math.ceil(left / speed.cpm);
   const time = pager.page >= pager.count - 1 ? 'Last page of the chapter' : mins <= 1 ? 'About a minute left in the chapter' : `${mins} min left in the chapter`;
   $('pageNum').textContent = L ? `${bookPercent()}%  ·  ${time}` : `${pager.page + 1} / ${pager.count}`;
+  showFinishButton();
 }
 // Learn reading speed from how long you spend on each page you move past.
 function notePageTime() {
@@ -1744,9 +1745,16 @@ async function fillCovers(books) {
 const dayKey = (t) => { const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 const niceDate = (t) => new Date(t).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 function finishHtml(rec) {
-  return rec?.finished
-    ? `<div class="more"><p class="hint">Finished on ${niceDate(rec.finished)}</p><button class="text-btn" id="unfinishBook">Not finished yet</button></div>`
-    : '<div class="more"><button class="btn" id="finishBook">Mark as finished</button><p class="hint">End of the book</p></div>';
+  return `<span class="finish hint">${rec?.finished ? 'Finished on ' + niceDate(rec.finished) : 'End of the book'}</span>`;
+}
+// The button sits on top of the page, outside the book text: pages get laid out again
+// while readings load, and a button inside them could move under your finger.
+function showFinishButton() {
+  const btn = $('finishBtn');
+  const atEnd = reader.book && pager.page >= pager.count - 1 && !!$('text').querySelector('.chapter-end .finish');
+  btn.hidden = !atEnd;
+  if (atEnd) btn.textContent = reader.book.finished ? 'Not finished yet' : 'Mark as finished';
+  btn.classList.toggle('quiet', !!reader.book?.finished);
 }
 async function setFinished(on) {
   const rec = reader.book;
@@ -1754,8 +1762,9 @@ async function setFinished(on) {
   if (on) { rec.finished = Date.now(); rec.percent = 100; } else delete rec.finished;
   rec.hibiPending = true;
   await db.put('books', rec);
-  const end = $('text').querySelector('.chapter-end .more, .chapter-end > .hint');
+  const end = $('text').querySelector('.chapter-end .finish');
   if (end) end.outerHTML = finishHtml(rec);
+  showFinishButton();
   toast(on ? 'Finished. Nice work.' : 'Back to your reading list.');
   sendToHibi(rec);
 }
@@ -1997,12 +2006,11 @@ function init() {
   document.querySelectorAll('.sheet').forEach(enableSheetSwipe);
   document.querySelectorAll('.close-sheet').forEach((b) => b.addEventListener('click', closeSheet));
 
+  $('finishBtn').addEventListener('click', () => setFinished(!reader.book?.finished));
   $('text').addEventListener('click', (e) => {
     if (e.target.closest('#nextChapter')) return loadChapter(reader.chapter + 1);
     if (e.target.closest('#chapterLearn')) return startLearning();
     if (e.target.closest('#moreEpisodes')) return moreEpisodes();
-    if (e.target.closest('#finishBook')) return setFinished(true);
-    if (e.target.closest('#unfinishBook')) return setFinished(false);
     const link = e.target.closest('[data-target]');
     if (link) {
       const t = link.dataset.target;

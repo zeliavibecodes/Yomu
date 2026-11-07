@@ -279,6 +279,9 @@ svg.i { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-widt
 .safe-probe { position: fixed; left: 0; width: 0; visibility: hidden; pointer-events: none; }
 .safe-probe.top { top: 0; height: env(safe-area-inset-top, 0px); }
 .safe-probe.bottom { bottom: 0; height: env(safe-area-inset-bottom, 0px); }
+.finish-btn { position: absolute; left: 50%; bottom: calc(var(--safe-bottom) + 44px); transform: translateX(-50%); z-index: 4; white-space: nowrap; }
+.finish-btn:active { transform: translateX(-50%) scale(0.98); }
+.finish-btn.quiet { background: none; color: var(--muted); box-shadow: none; }
 .page-num {
   position: absolute; left: 0; right: 0; bottom: calc(var(--safe-bottom) + 14px);
   text-align: center; font-size: 11px; letter-spacing: 0.04em; color: var(--faint); pointer-events: none; z-index: 3; white-space: pre;
