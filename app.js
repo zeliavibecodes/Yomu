@@ -804,6 +804,21 @@ function showProgress() {
   const time = pager.page >= pager.count - 1 ? 'Last page of the chapter' : mins <= 1 ? 'About a minute left in the chapter' : `${mins} min left in the chapter`;
   $('pageNum').textContent = L ? `${bookPercent()}%  ·  ${time}` : `${pager.page + 1} / ${pager.count}`;
   showFinishButton();
+  offerReview();
+}
+// When a full session's worth of words is waiting, offer a short review on the next page.
+// It goes away when you turn the page, and comes back after another 20 words.
+const offer = { bucket: 0, page: -1, chapter: -1 };
+function offerReview() {
+  const pill = $('reviewPill');
+  const n = waitingCount(), bucket = Math.floor(n / SESSION_SIZE);
+  if (!pill.hidden && (offer.page !== pager.page || offer.chapter !== reader.chapter)) pill.hidden = true;
+  if (bucket < offer.bucket) offer.bucket = bucket;   // you reviewed since
+  const atEnd = pager.page >= pager.count - 1;
+  if (!bucket || bucket <= offer.bucket || atEnd || !reader.book) return;
+  offer.bucket = bucket; offer.page = pager.page; offer.chapter = reader.chapter;
+  pill.textContent = `${n} words waiting · Review ${SESSION_SIZE} now`;
+  pill.hidden = false;
 }
 // Learn reading speed from how long you spend on each page you move past.
 function notePageTime() {
@@ -1051,7 +1066,7 @@ async function buildChapter(index, { images = true } = {}) {
   else if (kk && !kk.finished) end.innerHTML = '<div class="more"><button class="btn" id="moreEpisodes">Check for new episodes</button><p class="hint" id="moreMsg">The author is still writing this story.</p></div>';
   else end.innerHTML = finishHtml(reader.book);
   // Learn the words added while reading, right after the chapter.
-  const learnN = learnList().length + lookedUpList().length;
+  const learnN = waitingCount();
   end.insertAdjacentHTML('afterbegin', `<button class="btn primary chapter-learn" id="chapterLearn" ${learnN ? '' : 'hidden'}>${learnLabel()}</button>`);
   end.insertAdjacentHTML('afterbegin', `<div class="chapter-taps" id="chapterTaps">${tapSummaryHtml(index)}</div>`);
   // Write a line or two about the chapter, unless you've turned writing off.
@@ -1486,7 +1501,7 @@ function openWord(el) {
    - studied before: reviewed in this sentence, and your grade goes to jpdb. */
 const LOOKED_KEY = 'yomu.lookedup';
 function lookedUpList() { try { return JSON.parse(localStorage.getItem(LOOKED_KEY) || '[]'); } catch { return []; } }
-function setLookedUp(l) { try { localStorage.setItem(LOOKED_KEY, JSON.stringify(l.slice(-60))); } catch {} }
+function setLookedUp(l) { try { localStorage.setItem(LOOKED_KEY, JSON.stringify(l.slice(-150))); } catch {} }
 function baseState(state) { return !state ? null : state[0] === 'redundant' || state[0] === 'locked' ? state[1] || state[0] : state[0]; }
 function noteTap(v, sentence) {
   if (!v?.vid) return;
@@ -1494,13 +1509,17 @@ function noteTap(v, sentence) {
   const kind = st === 'new' ? 'new' : ['learning', 'known', 'never-forget', 'due', 'failed'].includes(st) ? 'studied' : !st ? 'other' : '';
   if (!kind) return;   // hidden or suspended on jpdb
   countTap(v, kind);
-  if (kind === 'new' && settings.key) return rememberForLearning(v, sentence);
+  if (kind === 'new' && settings.key) return rememberForLearning(v, sentence, true);
   if (kind === 'studied' && !settings.key) return;
-  // Studied words are reviewed and graded on jpdb; words outside your decks are reviewed in Yomu only.
-  const l = lookedUpList().filter((x) => !(x.vid === v.vid && x.sid === v.sid));
+  // Studied words are reviewed and graded on jpdb; words outside your decks are practised in Yomu only.
+  // Each word is kept once, with how many times you tapped it, so sessions start with the words you needed most.
+  const all = lookedUpList();
+  const old = all.find((x) => x.vid === v.vid && x.sid === v.sid);
+  const l = all.filter((x) => x !== old);
   l.push({ vid: v.vid, sid: v.sid, spelling: v.spelling, reading: v.reading, meanings: (v.meanings || []).slice(0, 3),
     sentence: { before: sentence.before, word: sentence.word, after: sentence.after },
-    book: reader.book?.title ? shortTitle(reader.book.title) : '', at: Date.now(), review: true, local: kind === 'other' });
+    book: reader.book?.title ? shortTitle(reader.book.title) : '', at: Date.now(), review: true, local: kind === 'other',
+    n: (old?.n || 0) + 1, freq: v.freq ?? old?.freq ?? null });
   setLookedUp(l);
   refreshLearn();
 }
@@ -1537,6 +1556,24 @@ function tapSummaryHtml(chapter) {
     <p class="ct-big">${words.length} word${words.length === 1 ? '' : 's'} looked up${total > words.length ? ` <span>· ${total} taps</span>` : ''}</p>
     <p class="ct-line">${parts.join(' · ')}</p>
     ${top.length ? `<p class="ct-line">Most looked up: ${top.map((w) => `<b>${esc(w.s)}</b> ${w.n}×`).join(' · ')}</p>` : ''}`;
+}
+// "Add to deck" on a practice card: the word goes to your deck and becomes a new word.
+async function addToDeckFromReview(it) {
+  if (!settings.deck) throw new Error('Choose a deck in Settings first.');
+  await jpdb('deck/add-vocabulary', { id: Number(settings.deck), vocabulary: [[it.vid, it.sid]] });
+  const s = it.sentence || {};
+  const full = (s.before || '') + (s.word || '') + (s.after || '');
+  if (settings.sentence && s.word && full.length <= 300) { try { await jpdb('set-card-sentence', { vid: it.vid, sid: it.sid, sentence: full }); } catch {} }
+  setLookedUp(lookedUpList().filter((x) => !(x.vid === it.vid && x.sid === it.sid)));
+  const v = vocab.get(it.vid + '/' + it.sid);
+  if (v) { v.state = ['new']; updateWordEverywhere(v); }
+}
+// Keep how common each word is (from jpdb), so the counts outside a session match what a session shows.
+function rememberFreq(freqs) {
+  const upd = (l) => l.map((x) => (freqs.has(x.vid + '/' + x.sid) ? { ...x, freq: freqs.get(x.vid + '/' + x.sid) } : x));
+  setLookedUp(upd(lookedUpList()));
+  setLearn(upd(learnList()));
+  refreshLearn();
 }
 function reviewedLookedUp(it) {
   setLookedUp(lookedUpList().filter((x) => !(x.vid === it.vid && x.sid === it.sid)));
@@ -1594,15 +1631,27 @@ function updateWordEverywhere(v) {
 const LEARN_KEY = 'yomu.tolearn';
 function learnList() { try { return JSON.parse(localStorage.getItem(LEARN_KEY) || '[]'); } catch { return []; } }
 function setLearn(l) { try { localStorage.setItem(LEARN_KEY, JSON.stringify(l)); } catch {} }
-function rememberForLearning(v, sentence) {
+function rememberForLearning(v, sentence, tap = false) {
   if (!v?.vid) return;
-  const l = learnList().filter((x) => !(x.vid === v.vid && x.sid === v.sid));
+  const all = learnList();
+  const old = all.find((x) => x.vid === v.vid && x.sid === v.sid);
+  // A word you looked up and then added to a deck is now a new word: keep it in one list only.
+  const looked = lookedUpList();
+  const was = looked.find((x) => x.vid === v.vid && x.sid === v.sid);
+  if (was) setLookedUp(looked.filter((x) => x !== was));
+  const l = all.filter((x) => x !== old);
   l.push({ vid: v.vid, sid: v.sid, spelling: v.spelling, reading: v.reading, meanings: (v.meanings || []).slice(0, 3),
-    sentence: sentence ? { before: sentence.before, word: sentence.word, after: sentence.after } : null,
-    book: reader.book?.title ? shortTitle(reader.book.title) : '', at: Date.now() });
+    sentence: sentence ? { before: sentence.before, word: sentence.word, after: sentence.after } : old?.sentence || null,
+    book: reader.book?.title ? shortTitle(reader.book.title) : old?.book || '', at: Date.now(),
+    n: (old?.n || was?.n || 0) + (tap ? 1 : 0) || 1, freq: v.freq ?? old?.freq ?? was?.freq ?? null });
   setLearn(l);
   refreshLearn();
 }
+// Words outside your decks only join a session if you tapped them twice or they're common;
+// most of the others are names or rare words.
+const SESSION_SIZE = 20;
+const practiceReady = (it) => !it.local || (it.n || 1) >= 2 || (it.freq && it.freq <= 15000);
+function waitingCount() { return learnList().length + lookedUpList().filter(practiceReady).length; }
 function learned(it) {
   setLearn(learnList().filter((x) => !(x.vid === it.vid && x.sid === it.sid)));
   const v = vocab.get(it.vid + '/' + it.sid);
@@ -1611,13 +1660,11 @@ function learned(it) {
 }
 // The small "learn" button in the reading bar, and the one at the end of a chapter.
 function learnLabel() {
-  const n = learnList().length, r = lookedUpList().length;
-  if (!r) return `Learn ${n} new word${n === 1 ? '' : 's'}`;
-  if (!n) return `Review ${r} word${r === 1 ? '' : 's'} you looked up`;
-  return `Learn and review ${n + r} words`;
+  const n = Math.min(SESSION_SIZE, waitingCount());
+  return `Review ${n} word${n === 1 ? '' : 's'}`;
 }
 function refreshLearn() {
-  const n = learnList().length + lookedUpList().length;
+  const n = waitingCount();
   $('learnBtn').hidden = !n;
   $('learnCount').textContent = n;
   $('learnBtn').setAttribute('aria-label', learnLabel());
@@ -2177,6 +2224,7 @@ function init() {
   $('libSettingsBtn').addEventListener('click', () => openSheet('settingsSheet'));
   $('scrim').addEventListener('click', closeSheet);
   $('learnBtn').addEventListener('click', startLearning);
+  $('reviewPill').addEventListener('click', () => { $('reviewPill').hidden = true; startLearning(); });
   document.addEventListener('selectionchange', onSelection);
   $('explainPill').addEventListener('click', () => {
     const s = selectedInBook();
@@ -2276,7 +2324,7 @@ function init() {
 window.yomu = {
   get settings() { return settings; }, speed, vocab, parseTexts, toast, openSheet, closeSheet,
   addBookBuffer, findAozoraBook, findWebBook, openBook,
-  jpdb, learnList, learned, refreshLearn, lookedUpList, reviewedLookedUp,
+  jpdb, learnList, learned, refreshLearn, lookedUpList, reviewedLookedUp, practiceReady, SESSION_SIZE, addToDeckFromReview, rememberFreq,
   writingContext, setBookWriting, refreshWrite,
 };
 

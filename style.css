@@ -711,3 +711,14 @@ button.add-book { border: 0; font-family: inherit; }
 .wr-asked { margin-top: 14px; }
 .wr-ask-me { font-size: 14px; color: var(--muted); margin: 0 0 2px; }
 .wr-ask-jp { font-family: var(--mincho); font-size: 16px; margin: 0 0 10px; }
+
+/* Review words: what each card does */
+.ln-top { display: flex; justify-content: space-between; align-items: center; margin: 0 2px 10px; }
+.ln-top .ln-progress { margin: 0; }
+.ln-tag { font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px; background: var(--fill); color: var(--ink-2); }
+.ln-tag-new { background: var(--ink); color: var(--paper); }
+.ln-tag-practice, .ln-tag-again { background: none; color: var(--muted); box-shadow: inset 0 0 0 1px var(--fill-strong); }
+.ln-hint { font-size: 13px; color: var(--muted); text-align: center; margin: 12px 0 0; }
+.ln-foot { display: flex; justify-content: center; gap: 22px; }
+.ln-sum { text-align: center; margin: 4px 0 0; }
+.review-pill { box-shadow: var(--shadow-card, 0 4px 16px rgba(0,0,0,.18)); }
