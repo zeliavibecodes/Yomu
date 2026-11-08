@@ -101,17 +101,22 @@ The chapter (it may be cut in the middle): ${JSON.stringify(chapter)}`,
     if (body.mode === 'correct') {
       const text = clip(body.text, 600), question = clip(body.question, 200), chapter = clip(body.chapter, 1500);
       if (!text.trim()) return json({ error: 'Nothing to check' }, 400, cors);
-      const out = await gemini(
-        `${WRITER}
+      const prompt = `${WRITER}
 She wrote the Japanese below${question ? ` in answer to the question ${JSON.stringify(question)}` : ' about the chapter she just read'}. Correct it so it is natural and grammatically correct.
+- Correct ALL of it: every sentence she wrote must appear in the corrected text, in the same order. Never drop or merge away a sentence, even one that is hard to fix.
 - Keep her meaning, her ideas and her level. Change as little as possible and don't make it fancier than it needs to be.
 - "segments": the corrected text split into pieces, in order. Joined together, the pieces must equal the corrected text exactly. Mark each piece "changed": true if it differs from what she wrote, with "was" set to what she wrote in its place (an empty string if the piece is new). Unchanged pieces have "changed": false and "was" empty. Keep changed pieces as small as possible.
 - "note": one or two plain English sentences about the most useful fix and why. Write every Japanese word, particle or ending in Japanese script, never in romaji (write な, not na). If her text was already natural, return it as one unchanged piece and say in one short sentence what works well.
-- "translation": a natural English translation of the corrected text.
+- "translation": a natural English translation of the whole corrected text.
 ${chapter ? `For context only, the end of the chapter: ${JSON.stringify(chapter)}
-` : ''}What she wrote: ${JSON.stringify(text)}`,
-        { type: 'OBJECT', properties: { segments: { type: 'ARRAY', items: { type: 'OBJECT', properties: { text: { type: 'STRING' }, changed: { type: 'BOOLEAN' }, was: { type: 'STRING' } }, required: ['text', 'changed', 'was'] } }, note: { type: 'STRING' }, translation: { type: 'STRING' } }, required: ['segments', 'note', 'translation'] },
-      );
+` : ''}What she wrote: ${JSON.stringify(text)}`;
+      const schema = { type: 'OBJECT', properties: { segments: { type: 'ARRAY', items: { type: 'OBJECT', properties: { text: { type: 'STRING' }, changed: { type: 'BOOLEAN' }, was: { type: 'STRING' } }, required: ['text', 'changed', 'was'] } }, note: { type: 'STRING' }, translation: { type: 'STRING' } }, required: ['segments', 'note', 'translation'] };
+      let out = await gemini(prompt, schema);
+      // Gemini sometimes leaves out a sentence it finds hard to fix: if so, ask once more.
+      const count = (t) => (t.match(/[。！？!?．.]/g) || []).length;
+      if (count((out.segments || []).map((x) => x?.text || '').join('')) < count(text)) {
+        try { const again = await gemini(prompt, schema); if (again.segments?.length) out = again; } catch {}
+      }
       const segments = (out.segments || []).filter((x) => x && typeof x.text === 'string').map((x) => ({ text: x.text, changed: !!x.changed, was: x.was || '' }));
       return json({ segments: segments.length ? segments : [{ text, changed: false, was: '' }], note: out.note || '', translation: out.translation || '' }, 200, cors);
     }
