@@ -722,3 +722,95 @@ button.add-book { border: 0; font-family: inherit; }
 .ln-foot { display: flex; justify-content: center; gap: 22px; }
 .ln-sum { text-align: center; margin: 4px 0 0; }
 .review-pill { box-shadow: var(--shadow-card, 0 4px 16px rgba(0,0,0,.18)); }
+
+/* =========================================================
+   Library look: black and off-white, a serif for titles, small spaced
+   monospace for labels, thin lines instead of grey boxes, and a background
+   picture behind the top of the screen (Settings → Library background).
+   ========================================================= */
+:root { --mono: ui-monospace, "SF Mono", Menlo, monospace; --line: rgba(0, 0, 0, 0.16); }
+:root[data-theme="dark"] { --line: rgba(255, 255, 255, 0.16); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --line: rgba(255, 255, 255, 0.16); } }
+:root[data-theme="dark"] #library { --paper: #000000; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) #library { --paper: #000000; } }
+#library { background: var(--paper); position: relative; }
+
+/* The background picture: strongest at the top, fading out before the shelf.
+   In light mode it's inverted, so the lines become dark on a light page. */
+.lib-bg {
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background: center top / cover no-repeat; opacity: 0.5;
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 30%, transparent 78%);
+  mask-image: linear-gradient(to bottom, #000 0%, #000 30%, transparent 78%);
+  filter: invert(1); opacity: 0.32;
+}
+.lib-bg[data-bg="haze"] { opacity: 0.4; }
+:root[data-theme="dark"] .lib-bg { filter: none; opacity: 0.55; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .lib-bg { filter: none; opacity: 0.55; } }
+#library > :not(.lib-bg):not(.add-book) { position: relative; z-index: 1; }
+
+/* Top line: time and date, then today's reading */
+.lib-head { align-items: flex-start; }
+.lib-clock { display: flex; flex-direction: column; gap: 4px; padding: 12px 0 0 6px; font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; color: var(--muted); }
+.lib-clock span:last-child { letter-spacing: 0.1em; color: var(--faint); }
+.lib-clock span:empty { display: none; }
+.lib-head .icon-btn svg { stroke-width: 1.3; }
+
+/* Library / Discover: serif titles */
+.lib-tabs { margin: 26px 0 18px; gap: 16px; }
+.lib-tabs button { font-family: var(--mincho); font-weight: 400; font-size: 20px; letter-spacing: 0; color: var(--faint); }
+.lib-tabs button.on { font-size: 34px; font-weight: 400; letter-spacing: -0.01em; }
+
+/* Now reading */
+.now-card {
+  display: flex; flex-direction: row-reverse; gap: 18px; height: 300px; box-sizing: border-box;
+  margin: 0 0 30px; padding: 24px 24px 22px; border-radius: 28px; border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--paper) 70%, transparent);
+  -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+}
+.now-title { margin: 0; writing-mode: vertical-rl; font-family: var(--mincho); font-size: 34px; line-height: 1.2; letter-spacing: 0.06em; overflow: hidden; }
+.now-title.size-m { font-size: 28px; } .now-title.size-s { font-size: 23px; } .now-title.size-xs { font-size: 19px; }
+.now-side { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: space-between; }
+.now-label { margin: 0; font-family: var(--mono); font-size: 10px; letter-spacing: 0.16em; color: var(--muted); }
+.now-foot { display: flex; flex-direction: column; gap: 12px; }
+.now-author { margin: 0; font-family: var(--mincho); font-size: 15px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.now-author:empty { display: none; }
+.now-bar { height: 1px; background: var(--line); }
+.now-bar span { display: block; height: 1px; background: var(--ink); }
+.now-meta { margin: 0; display: flex; justify-content: space-between; font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em; color: var(--muted); }
+.now-go { align-self: flex-start; margin-top: 4px; min-height: 44px; padding: 0 18px; border: 0; border-radius: 999px; background: var(--ink); color: var(--paper); font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; }
+.now-go:active { opacity: 0.7; }
+
+/* Shelf: outlined covers, serif titles, mono details */
+.lib-subrow { margin: 0 0 18px; padding-bottom: 0; border-bottom: 1px solid var(--line); }
+.lib-sub, .lib-subrow #editBtn { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; color: var(--muted); text-transform: lowercase; }
+.notice { background: none; border: 1px solid var(--line); border-radius: 14px; font-family: var(--mono); font-size: 12px; letter-spacing: 0.04em; color: var(--muted); }
+.shelf { gap: 28px 14px; }
+.book-cover { border-radius: 0; box-shadow: none; background: transparent; }
+.book-cover::after { display: none; }
+.book-cover img { filter: grayscale(1) contrast(1.05); }
+.book-spine { background: transparent; color: var(--ink); border: 1px solid var(--line); font-weight: 400; }
+.book-spine .sa, .book-spine .ss { color: var(--muted); }
+.book-spine .ss { font-family: var(--mono); font-weight: 400; }
+/* One quiet tone becomes a solid cover, for a little rhythm on the shelf */
+.book-spine.tone-4, .book-spine.tinted { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.book-spine.tone-4 .sa, .book-spine.tone-4 .ss, .book-spine.tinted .sa, .book-spine.tinted .ss { color: color-mix(in srgb, var(--paper) 60%, var(--ink)); }
+.book-meta .t { font-family: var(--mincho); font-weight: 400; font-size: 13px; }
+.book-meta .p { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; }
+.book-bar { height: 1px; border-radius: 0; background: var(--line); margin-top: 7px; }
+.shelf-head { display: flex; align-items: center; gap: 10px; margin: 14px 0 -10px; font-family: var(--mono); font-size: 10px; letter-spacing: 0.16em; color: var(--muted); }
+.shelf-head::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.empty-big { font-family: var(--mincho); color: var(--line); }
+.add-book {
+  background: color-mix(in srgb, var(--paper) 75%, transparent); color: var(--ink); border: 1px solid var(--ink);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); box-shadow: none;
+  font-family: var(--mono); font-weight: 400; font-size: 12px; letter-spacing: 0.14em; padding: 13px 22px 13px 18px;
+}
+.add-book svg.i { width: 15px; height: 15px; stroke-width: 1.5; }
+
+/* Settings: background picker */
+.bg-seg { background: none; padding: 0; gap: 8px; }
+.bg-seg button { flex: 1; padding: 0; aspect-ratio: 3 / 5; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); background: #000; }
+.bg-seg button img { width: 100%; height: 100%; object-fit: cover; display: block; opacity: 0.85; }
+.bg-seg button.on { outline: 2px solid var(--ink); outline-offset: 2px; box-shadow: none; }
+.bg-none { display: block; width: 100%; height: 100%; background: linear-gradient(to top right, transparent calc(50% - 0.5px), var(--muted) 50%, transparent calc(50% + 0.5px)); }

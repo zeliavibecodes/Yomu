@@ -12,7 +12,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 /* =========================================================
    Settings (small values, kept in localStorage)
    ========================================================= */
-const DEFAULTS = { key: '', deck: '', furigana: 'unknown', direction: 'vertical', size: 19, sentence: true, theme: 'auto', font: 'mincho', underline: false, animate: true, awake: true, ghToken: '', gistId: '', writing: true };
+const DEFAULTS = { key: '', deck: '', furigana: 'unknown', direction: 'vertical', size: 19, sentence: true, theme: 'auto', font: 'mincho', underline: false, animate: true, awake: true, ghToken: '', gistId: '', writing: true, bg: 'room' };
 const settings = { ...DEFAULTS };
 if (matchMedia('(prefers-reduced-motion: reduce)').matches) settings.animate = false;
 try { Object.assign(settings, JSON.parse(localStorage.getItem('yomu.settings') || '{}')); } catch {}
@@ -40,6 +40,11 @@ function applySettings() {
   $('animateToggle').checked = settings.animate;
   $('awakeToggle').checked = settings.awake;
   $('writingToggle').checked = settings.writing;
+  // The library's background picture, from Settings.
+  const bg = $('libBg');
+  bg.hidden = settings.bg === 'none';
+  if (settings.bg !== 'none') bg.style.backgroundImage = `url("bg/${settings.bg}.jpg")`;
+  bg.dataset.bg = settings.bg;
   $('keyNotice').hidden = !!settings.key;
 }
 
@@ -2024,21 +2029,56 @@ function sendReadingTime() {
   });
 }
 
+// The big card at the top of the library: the book you're reading, with a way straight back in.
+function renderNowReading(b) {
+  const box = $('nowReading');
+  box.hidden = !b;
+  if (!b) return;
+  const title = b.web || b.kakuyomu ? shortTitle(b.title) : b.title;
+  const pct = Math.max(1, b.percent ?? Math.round(((b.chapter || 0) + 1) / (b.chapters || 1) * 100));
+  const n = [...title].length;
+  const size = n <= 6 ? 'l' : n <= 11 ? 'm' : n <= 18 ? 's' : 'xs';
+  box.innerHTML = `<p class="now-title size-${size}">${esc(title)}</p>
+    <div class="now-side">
+      <p class="now-label">now reading</p>
+      <div class="now-foot">
+        <p class="now-author">${esc(b.author || sourceOf(b) || '')}</p>
+        <div class="now-bar"><span style="width:${pct}%"></span></div>
+        <p class="now-meta"><span>${pct}%</span><span>${esc(sourceOf(b) || 'epub')}</span></p>
+        <button class="now-go" data-open="${b.id}">continue →</button>
+      </div>
+    </div>`;
+}
+// The line at the top: the time and date, then today's reading and the words waiting.
+function updateLibClock() {
+  const d = new Date();
+  const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  const date = d.toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' }).replace(',', '').toUpperCase();
+  $('libClock').textContent = `${time} · ${date}`;
+  const mins = Math.round((readLog()[dayKey(Date.now())] || 0) / 60);
+  const words = waitingCount();
+  $('libToday').textContent = [mins ? `today ${mins} min` : '', words ? `${words} words waiting` : ''].filter(Boolean).join(' · ');
+}
 async function renderShelf() {
+  updateLibClock();
   coverUrls.splice(0).forEach((u) => URL.revokeObjectURL(u));
   const all = await db.all('books');
   const reading = all.filter((b) => !b.finished).sort((a, b) => (b.lastOpened || b.added) - (a.lastOpened || a.added));
   const done = all.filter((b) => b.finished).sort((a, b) => b.finished - a.finished);
-  const books = [...reading, ...done];
-  $('emptyShelf').hidden = books.length > 0;
-  $('libSub').textContent = books.length ? `${books.length} ${books.length === 1 ? 'book' : 'books'}` : '';
-  $('libSub').parentElement.hidden = !books.length;
+  // The book you opened last gets the big "now reading" card; the shelf shows the rest.
+  const hero = editing ? null : reading.find((b) => b.lastOpened);   // while editing, every book is on the shelf
+  renderNowReading(hero);
+  const books = [...reading.filter((b) => b !== hero), ...done];
+  $('emptyShelf').hidden = books.length > 0 || !!hero;
+  const count = all.length;
+  $('libSub').textContent = count ? `${count} ${count === 1 ? 'book' : 'books'}${done.length ? ` · ${done.length} finished` : ''}` : '';
+  $('libSub').parentElement.hidden = !count;
   $('editBtn').hidden = books.length === 0 || !$('discoverView').hidden;
   if (!books.length) editing = false;
   $('editBtn').textContent = editing ? 'Done' : 'Edit';
   $('shelf').innerHTML = '';
   for (const b of books) {
-    if (b === done[0]) $('shelf').insertAdjacentHTML('beforeend', `<p class="shelf-head">Finished · ${done.length}</p>`);
+    if (b === done[0]) $('shelf').insertAdjacentHTML('beforeend', `<p class="shelf-head"><span>finished · ${done.length}</span></p>`);
     const el = document.createElement('div');
     el.className = 'book-item';
     let cover;
@@ -2049,9 +2089,9 @@ async function renderShelf() {
     } else cover = typesetCover(b.web || b.kakuyomu ? shortTitle(b.title) : b.title, b.author, sourceOf(b), b.color);
     const shown = b.web || b.kakuyomu ? shortTitle(b.title) : b.title;
     const pct = b.lastOpened ? Math.max(1, b.percent ?? Math.round(((b.chapter || 0) + 1) / (b.chapters || 1) * 100)) : 0;
-    const prog = b.finished ? niceDate(b.finished) : !b.lastOpened ? 'Not started' : `${pct}% read`;
+    const prog = b.finished ? niceDate(b.finished).toLowerCase() : !b.lastOpened ? 'not started' : `${pct}%`;
     el.innerHTML = `<button class="book" data-open="${b.id}" aria-label="Open ${esc(b.title)}">${cover}
-      <div class="book-meta"><div class="t">${esc(shown)}</div><div class="p">${b.lastOpened || b.finished ? prog : esc(b.author || 'Not started')}</div>${pct && !b.finished ? `<div class="book-bar"><span style="width:${pct}%"></span></div>` : ''}</div></button>
+      <div class="book-meta"><div class="t">${esc(shown)}</div><div class="p">${b.lastOpened || b.finished ? prog : esc(b.author || 'not started')}</div>${pct && !b.finished ? `<div class="book-bar"><span style="width:${pct}%"></span></div>` : ''}</div></button>
       ${editing ? `<button class="book-remove" data-remove="${b.id}" aria-label="Remove ${esc(b.title)}">✕</button>` : ''}`;
     $('shelf').appendChild(el);
   }
@@ -2185,6 +2225,8 @@ function init() {
     if (op && !editing) openBook(op.dataset.open);
   });
 
+  $('nowReading').addEventListener('click', (e) => { const op = e.target.closest('[data-open]'); if (op) openBook(op.dataset.open); });
+  setInterval(() => { if (!$('library').hidden) updateLibClock(); }, 30e3);
   $('backBtn').addEventListener('click', closeBook);
   $('tocBtn').addEventListener('click', () => {
     const { toc, spine } = reader.epub;
