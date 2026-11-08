@@ -602,6 +602,15 @@ button.add-book { border: 0; font-family: inherit; }
 .learn-count { position: absolute; top: 4px; right: 2px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--ink); color: var(--paper); font-size: 10px; font-weight: 700; line-height: 16px; text-align: center; }
 .chapter-end { gap: 12px; }
 .chapter-end .chapter-learn { writing-mode: horizontal-tb; }
+/* Fixed size, so taps that change the summary never move the pages. */
+.chapter-taps { writing-mode: horizontal-tb; width: 250px; height: 8.5em; overflow: hidden; font-size: 13px; line-height: 1.5; color: var(--muted); text-align: center; display: flex; flex-direction: column; justify-content: center; }
+.chapter-taps:empty { display: none; }
+.chapter-taps p { margin: 0; }
+.chapter-taps .nw { white-space: nowrap; }
+.chapter-taps .ct-head { font-size: 12px; color: var(--faint); }
+.chapter-taps .ct-big { font-size: 17px; color: var(--ink); margin: 2px 0 4px; }
+.chapter-taps .ct-big span { font-size: 13px; color: var(--muted); }
+.chapter-taps b { font-family: var(--mincho, serif); font-weight: 500; color: var(--ink); }
 .ln-progress { font-size: 13px; color: var(--muted); margin: -4px 0 16px; font-variant-numeric: tabular-nums; }
 .ln-card { background: var(--fill); border-radius: 18px; padding: 26px 20px 20px; margin-bottom: 18px; text-align: center; }
 .ln-word { font-family: var(--body-font, var(--mincho)); font-size: 46px; line-height: 1.2; ruby-position: over; letter-spacing: 0.02em; }

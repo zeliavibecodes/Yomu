@@ -37,8 +37,8 @@ export async function start() {
     for (const it of list) if (!isNew(st.get(key(it)))) Y().learned(it);
     list = Y().learnList();
     for (const it of list) it.lockedOnJpdb = isLocked(st.get(key(it)));
-    // A looked-up word no longer in your decks, or reset to new, has nothing to review.
-    for (const it of looked) { const s = st.get(key(it)); if (!s || isNew(s)) Y().reviewedLookedUp(it); }
+    // A studied word you since removed from your decks, or reset to new, has nothing to review on jpdb.
+    for (const it of looked) { const s = st.get(key(it)); if (!it.local && (!s || isNew(s))) Y().reviewedLookedUp(it); }
     looked = Y().lookedUpList();
   }
   // New words first, then the words you looked up.
@@ -49,7 +49,7 @@ export async function start() {
 
 function learnedLine() {
   const ok = session.done - session.notTaken - session.reviewed;
-  const rv = session.reviewed ? ` ${session.reviewed} ${session.reviewed === 1 ? 'word you looked up was' : 'words you looked up were'} reviewed on jpdb.` : '';
+  const rv = session.reviewed ? ` You reviewed ${session.reviewed} ${session.reviewed === 1 ? 'word' : 'words'} you looked up.` : '';
   if (!ok && !session.notTaken) return rv.trim();
   return learnedLineNew(ok) + rv;
 }
@@ -89,6 +89,7 @@ function render() {
       <ruby class="ln-word">${esc(it.spelling)}<rt>${session.shown || (!session.again.has(key(it)) && !it.review) ? esc(reading) : ''}</rt></ruby>
       ${sentence ? `<p class="ln-sentence">${sentence}</p>` : ''}
       ${it.book ? `<p class="ln-book">${it.review ? 'You looked this up in' : 'From'} ${esc(it.book)}</p>` : ''}
+      ${it.local ? '<p class="ln-book">Not in your jpdb decks · reviewed here only</p>' : ''}
       ${it.lockedOnJpdb ? '<p class="ln-book">jpdb lists this word as locked</p>' : ''}
     </div>
     ${session.shown ? `
@@ -116,6 +117,15 @@ async function grade(it, g) {
   session.busy = true;
   document.querySelectorAll('[data-grade]').forEach((b) => (b.disabled = true));
   $('lnMsg').textContent = 'Saving…';
+  // Words outside your decks are reviewed here only: nothing goes to jpdb.
+  if (it.local) {
+    Y().reviewedLookedUp(it);
+    session.reviewed++; session.done++;
+    session.queue.shift();
+    if (g === 'nothing') { session.again.add(key(it)); session.queue.push(it); }
+    session.shown = false; session.busy = false;
+    return render();
+  }
   try {
     await Y().jpdb('review', { vid: it.vid, sid: it.sid, grade: g });
     if (it.review) {

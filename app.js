@@ -1052,6 +1052,7 @@ async function buildChapter(index, { images = true } = {}) {
   // Learn the words added while reading, right after the chapter.
   const learnN = learnList().length + lookedUpList().length;
   end.insertAdjacentHTML('afterbegin', `<button class="btn primary chapter-learn" id="chapterLearn" ${learnN ? '' : 'hidden'}>${learnLabel()}</button>`);
+  end.insertAdjacentHTML('afterbegin', `<div class="chapter-taps" id="chapterTaps">${tapSummaryHtml(index)}</div>`);
   root.appendChild(end);
 
   // Find the paragraphs worth sending to jpdb.
@@ -1485,16 +1486,54 @@ function lookedUpList() { try { return JSON.parse(localStorage.getItem(LOOKED_KE
 function setLookedUp(l) { try { localStorage.setItem(LOOKED_KEY, JSON.stringify(l.slice(-60))); } catch {} }
 function baseState(state) { return !state ? null : state[0] === 'redundant' || state[0] === 'locked' ? state[1] || state[0] : state[0]; }
 function noteTap(v, sentence) {
-  if (!v?.vid || !settings.key) return;
+  if (!v?.vid) return;
   const st = baseState(v.state);
-  if (st === 'new') return rememberForLearning(v, sentence);
-  if (!['learning', 'known', 'never-forget', 'due', 'failed'].includes(st)) return;
+  const kind = st === 'new' ? 'new' : ['learning', 'known', 'never-forget', 'due', 'failed'].includes(st) ? 'studied' : !st ? 'other' : '';
+  if (!kind) return;   // hidden or suspended on jpdb
+  countTap(v, kind);
+  if (kind === 'new' && settings.key) return rememberForLearning(v, sentence);
+  if (kind === 'studied' && !settings.key) return;
+  // Studied words are reviewed and graded on jpdb; words outside your decks are reviewed in Yomu only.
   const l = lookedUpList().filter((x) => !(x.vid === v.vid && x.sid === v.sid));
   l.push({ vid: v.vid, sid: v.sid, spelling: v.spelling, reading: v.reading, meanings: (v.meanings || []).slice(0, 3),
     sentence: { before: sentence.before, word: sentence.word, after: sentence.after },
-    book: reader.book?.title ? shortTitle(reader.book.title) : '', at: Date.now(), review: true });
+    book: reader.book?.title ? shortTitle(reader.book.title) : '', at: Date.now(), review: true, local: kind === 'other' });
   setLookedUp(l);
   refreshLearn();
+}
+
+// How many times you tapped each word in each chapter, for the summary at the chapter end.
+const TAPS_KEY = 'yomu.taps';
+function tapLog() { try { return JSON.parse(localStorage.getItem(TAPS_KEY) || '{}'); } catch { return {}; } }
+function countTap(v, kind) {
+  if (!reader.book) return;
+  const log = tapLog(), ch = reader.book.id + '/' + reader.chapter;
+  const words = (log[ch] = log[ch] || { at: 0, w: {} }).w;
+  const k = v.vid + '/' + v.sid;
+  words[k] = { s: v.spelling, n: (words[k]?.n || 0) + 1, kind };
+  log[ch].at = Date.now();
+  const keys = Object.keys(log).sort((a, b) => log[b].at - log[a].at);
+  for (const old of keys.slice(40)) delete log[old];   // keep the last 40 chapters
+  try { localStorage.setItem(TAPS_KEY, JSON.stringify(log)); } catch {}
+  const box = $('text').querySelector('#chapterTaps');
+  if (box) {
+    const first = !box.innerHTML;
+    box.innerHTML = tapSummaryHtml(reader.chapter);
+    if (first) relayoutKeeping(currentBlock());   // the summary just appeared: count the pages again
+  }
+}
+function tapSummaryHtml(chapter) {
+  const entry = reader.book && tapLog()[reader.book.id + '/' + chapter];
+  const words = entry ? Object.values(entry.w) : [];
+  if (!words.length) return '';
+  const total = words.reduce((a, w) => a + w.n, 0);
+  const by = (k) => words.filter((w) => w.kind === k).length;
+  const parts = [[by('new'), 'not studied yet'], [by('studied'), 'studied before'], [by('other'), 'not in your decks']].filter(([n]) => n).map(([n, t]) => `<span class="nw">${n} ${t}</span>`);
+  const top = words.filter((w) => w.n > 1).sort((a, b) => b.n - a.n).slice(0, 3);
+  return `<p class="ct-head">This chapter</p>
+    <p class="ct-big">${words.length} word${words.length === 1 ? '' : 's'} looked up${total > words.length ? ` <span>· ${total} taps</span>` : ''}</p>
+    <p class="ct-line">${parts.join(' · ')}</p>
+    ${top.length ? `<p class="ct-line">Most looked up: ${top.map((w) => `<b>${esc(w.s)}</b> ${w.n}×`).join(' · ')}</p>` : ''}`;
 }
 function reviewedLookedUp(it) {
   setLookedUp(lookedUpList().filter((x) => !(x.vid === it.vid && x.sid === it.sid)));
