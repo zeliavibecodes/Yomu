@@ -792,9 +792,10 @@ button.add-book { border: 0; font-family: inherit; }
 .book-spine { background: transparent; color: var(--ink); border: 1px solid var(--line); font-weight: 400; }
 .book-spine .sa, .book-spine .ss { color: var(--muted); }
 .book-spine .ss { font-family: var(--mono); font-weight: 400; }
-/* One quiet tone becomes a solid cover, for a little rhythm on the shelf */
-.book-spine.tone-4, .book-spine.tinted { background: var(--ink); color: var(--paper); border-color: var(--ink); }
-.book-spine.tone-4 .sa, .book-spine.tone-4 .ss, .book-spine.tinted .sa, .book-spine.tinted .ss { color: color-mix(in srgb, var(--paper) 60%, var(--ink)); }
+/* Light cover = you're reading it (in Discover: it's in your library). Outline = not started. Finished = dimmed. */
+.book-spine.cover-reading { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.book-spine.cover-reading .sa, .book-spine.cover-reading .ss { color: color-mix(in srgb, var(--paper) 60%, var(--ink)); }
+.book-item.finished .book-cover { opacity: 0.45; }
 .book-meta .t { font-family: var(--mincho); font-weight: 400; font-size: 13px; }
 .book-meta .p { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; }
 .book-bar { height: 1px; border-radius: 0; background: var(--line); margin-top: 7px; }

@@ -1879,14 +1879,11 @@ function shortTitle(t) {
 }
 // A typeset cover for books without one: the title sized to fit, the author set apart,
 // where the book came from, and one of a few quiet tones picked from the title.
-function typesetCover(title, author, source, color) {
-  let h = 0;
-  for (const ch of title) h = (h * 31 + ch.codePointAt(0)) >>> 0;
+// Covers mean something: light = you're reading it, outline = not started, dimmed = finished.
+function typesetCover(title, author, source, state = 'new') {
   const n = [...title].length;
   const size = n <= 4 ? 'xl' : n <= 8 ? 'l' : n <= 14 ? 'm' : n <= 22 ? 's' : 'xs';
-  // Kakuyomu stories use the colour their author picked; other books get one of the quiet tones.
-  const tinted = /^#[0-9a-f]{6}$/i.test(color || '');
-  return `<div class="book-cover"><div class="book-spine ${tinted ? 'tinted' : `tone-${h % 6}`} size-${size}"${tinted ? ` style="--tint:${color}"` : ''}><span class="st">${esc(title)}</span>`
+  return `<div class="book-cover"><div class="book-spine cover-${state} size-${size}"><span class="st">${esc(title)}</span>`
     + `${author ? `<span class="sa">${esc(author)}</span>` : ''}${source ? `<span class="ss">${esc(source)}</span>` : ''}</div></div>`;
 }
 const sourceOf = (b) => (b.aozora ? '青空文庫' : (b.web?.site || (b.kakuyomu ? 'kakuyomu' : '')) === 'kakuyomu' ? 'カクヨム' : b.web?.site === 'narou' ? '小説家になろう' : '');
@@ -2080,13 +2077,13 @@ async function renderShelf() {
   for (const b of books) {
     if (b === done[0]) $('shelf').insertAdjacentHTML('beforeend', `<p class="shelf-head"><span>finished · ${done.length}</span></p>`);
     const el = document.createElement('div');
-    el.className = 'book-item';
+    el.className = b.finished ? 'book-item finished' : 'book-item';
     let cover;
     if (b.cover) {
       const u = URL.createObjectURL(b.cover instanceof Blob ? b.cover : new Blob([b.cover.data], { type: b.cover.type }));
       coverUrls.push(u);
       cover = `<div class="book-cover"><img src="${u}" alt=""></div>`;
-    } else cover = typesetCover(b.web || b.kakuyomu ? shortTitle(b.title) : b.title, b.author, sourceOf(b), b.color);
+    } else cover = typesetCover(b.web || b.kakuyomu ? shortTitle(b.title) : b.title, b.author, sourceOf(b), b.finished ? 'done' : b.lastOpened ? 'reading' : 'new');
     const shown = b.web || b.kakuyomu ? shortTitle(b.title) : b.title;
     const pct = b.lastOpened ? Math.max(1, b.percent ?? Math.round(((b.chapter || 0) + 1) / (b.chapters || 1) * 100)) : 0;
     const prog = b.finished ? niceDate(b.finished).toLowerCase() : !b.lastOpened ? 'not started' : `${pct}%`;
@@ -2143,6 +2140,10 @@ async function moreEpisodes() {
   }
 }
 
+// Which Aozora works are in your library, for Discover's covers.
+async function aozoraInLibrary() {
+  return new Set((await db.all('books')).filter((b) => b.aozora).map((b) => b.aozora));
+}
 async function findAozoraBook(aozoraId) {
   const books = await db.all('books');
   return books.find((b) => b.aozora === aozoraId)?.id || null;
@@ -2365,7 +2366,7 @@ function init() {
 // Shared with the Discover screen (discover.js).
 window.yomu = {
   get settings() { return settings; }, speed, vocab, parseTexts, toast, openSheet, closeSheet,
-  addBookBuffer, findAozoraBook, findWebBook, openBook,
+  addBookBuffer, aozoraInLibrary, findAozoraBook, findWebBook, openBook,
   jpdb, learnList, learned, refreshLearn, lookedUpList, reviewedLookedUp, practiceReady, SESSION_SIZE, addToDeckFromReview, rememberFreq,
   writingContext, setBookWriting, refreshWrite,
 };

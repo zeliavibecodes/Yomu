@@ -29,8 +29,9 @@ export async function load() {
   data = d;
 }
 
-// The same quiet cover tones as the library, picked from the title.
-const toneOf = (t) => { let h = 0; for (const ch of t) h = (h * 31 + ch.codePointAt(0)) >>> 0; return `tone-${h % 6}`; };
+// A light cover means the book is already in your library; the rest are outlines.
+let inLibrary = new Set();
+const coverOf = (w) => (inLibrary.has(w.id) ? 'cover-reading' : 'cover-new');
 const plotOf = (w) => data.plots[w.id];
 const levelOf = (w) => Object.keys(data.shelves).find((k) => data.shelves[k].includes(w.id));
 function minutes(chars) { return Math.max(1, Math.round(chars / (Y().speed.cpm || 150))); }
@@ -67,6 +68,7 @@ export async function render() {
     root.innerHTML = '<p class="hint d-loading">Loading the Aozora Bunko catalog…</p>';
     try { await load(); } catch { root.innerHTML = '<p class="hint d-loading">The catalog couldn’t load. Check your connection and try again.</p>'; return; }
   }
+  try { inLibrary = await Y().aozoraInLibrary(); } catch {}
   const q = $('dSearch').value.trim();
   root.innerHTML = q ? searchHtml(q) : shelvesHtml();
   observeCards();
@@ -76,7 +78,7 @@ function card(w) {
   const p = plotOf(w);
   const fit = cachedFit(w.id);
   return `<button class="d-card" data-w="${w.id}">
-    <div class="book-cover"><div class="book-spine ${toneOf(w.title)}">${esc(w.title)}<span class="sa">${esc(w.author)}</span></div></div>
+    <div class="book-cover"><div class="book-spine ${coverOf(w)}">${esc(w.title)}<span class="sa">${esc(w.author)}</span></div></div>
     <div class="t">${esc(w.title)}</div>
     ${p ? `<div class="en">${esc(p[0])}</div>` : ''}
     <div class="m">${timeLabel(w.length)}</div>
@@ -134,7 +136,7 @@ export async function openWork(id) {
   const inLib = await Y().findAozoraBook(w.id);
   $('dDetail').innerHTML = `
     <div class="dhead">
-      <div class="book-cover"><div class="book-spine ${toneOf(w.title)}">${esc(w.title)}<span class="sa">${esc(w.author)}</span></div></div>
+      <div class="book-cover"><div class="book-spine ${coverOf(w)}">${esc(w.title)}<span class="sa">${esc(w.author)}</span></div></div>
       <div>
         <div class="dt">${esc(w.title)}</div>
         ${p ? `<div class="de">${esc(p[0])}</div>` : w.subtitle ? `<div class="de">${esc(w.subtitle)}</div>` : ''}
