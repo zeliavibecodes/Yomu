@@ -106,7 +106,7 @@ The chapter (it may be cut in the middle): ${JSON.stringify(chapter)}`,
 She wrote the Japanese below${question ? ` in answer to the question ${JSON.stringify(question)}` : ' about the chapter she just read'}. Correct it so it is natural and grammatically correct.
 - Keep her meaning, her ideas and her level. Change as little as possible and don't make it fancier than it needs to be.
 - "segments": the corrected text split into pieces, in order. Joined together, the pieces must equal the corrected text exactly. Mark each piece "changed": true if it differs from what she wrote, with "was" set to what she wrote in its place (an empty string if the piece is new). Unchanged pieces have "changed": false and "was" empty. Keep changed pieces as small as possible.
-- "note": one or two plain English sentences about the most useful fix and why. Write any Japanese words in Japanese, never in romaji. If her text was already natural, return it as one unchanged piece and say in one short sentence what works well.
+- "note": one or two plain English sentences about the most useful fix and why. Write every Japanese word, particle or ending in Japanese script, never in romaji (write な, not na). If her text was already natural, return it as one unchanged piece and say in one short sentence what works well.
 - "translation": a natural English translation of the corrected text.
 ${chapter ? `For context only, the end of the chapter: ${JSON.stringify(chapter)}
 ` : ''}What she wrote: ${JSON.stringify(text)}`,
