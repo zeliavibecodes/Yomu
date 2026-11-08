@@ -688,3 +688,26 @@ button.add-book { border: 0; font-family: inherit; }
 .chapter-end .finish { writing-mode: horizontal-tb; }
 /* Reach a full page past the last column, so the last page scrolls into place like the others. */
 .dir-horizontal .chapter-end { inline-size: calc(100% + var(--pg-side)); padding-inline-end: var(--pg-side); }
+
+/* Help me say it */
+.wr-help { display: block; margin-top: 8px; }
+.wr-back { margin: -6px 0 6px; }
+.wr-chat-intro { margin: 0 2px 14px; }
+.wr-chat { display: flex; flex-direction: column; gap: 12px; margin-bottom: 14px; }
+.wr-msg.me { align-self: flex-end; max-width: 85%; background: var(--ink); color: var(--paper); border-radius: 18px 18px 6px 18px; padding: 10px 14px; font-size: 15px; line-height: 1.45; white-space: pre-wrap; }
+.wr-msg.tutor { background: var(--fill); border-radius: 18px 18px 18px 6px; padding: 14px 16px; }
+.wr-sug { font-family: var(--mincho); font-size: 20px; font-weight: 600; line-height: 1.6; margin: 0 0 10px; }
+.wr-vocab { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 4px; }
+.wr-vocab li { font-size: 14px; color: var(--ink-2); display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
+.wr-vocab b { font-family: var(--mincho); font-size: 16px; font-weight: 600; color: var(--ink); }
+.wr-vocab span { font-size: 13px; color: var(--muted); }
+.wr-vocab em { font-style: normal; }
+.wr-exp { font-size: 15px; line-height: 1.5; color: var(--ink-2); margin: 0; }
+.wr-use { margin-top: 12px; min-height: 40px; background: var(--raised); font-size: 14px; }
+.wr-msg-err { margin: 0; }
+.wr-ask { display: flex; gap: 8px; align-items: flex-end; position: sticky; bottom: 0; background: var(--raised); padding: 8px 0 4px; }
+.wr-ask textarea { flex: 1; min-width: 0; min-height: 48px; resize: none; border: 0; border-radius: 14px; padding: 12px 14px; background: var(--fill); color: var(--ink); font: inherit; font-size: 16px; line-height: 1.4; appearance: none; -webkit-appearance: none; }
+.wr-ask .btn { min-height: 48px; border-radius: 14px; }
+.wr-asked { margin-top: 14px; }
+.wr-ask-me { font-size: 14px; color: var(--muted); margin: 0 0 2px; }
+.wr-ask-jp { font-family: var(--mincho); font-size: 16px; margin: 0 0 10px; }

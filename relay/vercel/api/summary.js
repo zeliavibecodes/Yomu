@@ -6,6 +6,7 @@
 // POST { mode: 'reviews', reviews: [{ title, body }] }            → { reviews: [{ title, body }] }
 // POST { mode: 'explain', text, context }                         → { translation, literal, points: [{ part, reading, explanation }] }
 // POST { mode: 'prompt', book, chapter, words, avoid }             → { question, hint, words }
+// POST { mode: 'help', messages: [{ role, text }], question, draft, chapter } → { suggestion, words: [{ word, reading, meaning }], explanation }
 // POST { mode: 'correct', text, question, chapter }                → { segments: [{ text, changed, was }], note, translation }
 
 const ORIGINS = [/^https:\/\/zeliavibecodes\.github\.io$/, /^http:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?$/];
@@ -119,6 +120,24 @@ ${chapter ? `For context only, the end of the chapter: ${JSON.stringify(chapter)
       }
       const segments = (out.segments || []).filter((x) => x && typeof x.text === 'string').map((x) => ({ text: x.text, changed: !!x.changed, was: x.was || '' }));
       return json({ segments: segments.length ? segments : [{ text, changed: false, was: '' }], note: out.note || '', translation: out.translation || '' }, 200, cors);
+    }
+    if (body.mode === 'help') {
+      const messages = (body.messages || []).slice(-12).map((m) => ({ role: m.role === 'tutor' ? 'tutor' : 'learner', text: clip(m.text, 600) })).filter((m) => m.text.trim());
+      if (!messages.length) return json({ error: 'Nothing to answer' }, 400, cors);
+      const question = clip(body.question, 200), draft = clip(body.draft, 600), chapter = clip(body.chapter, 1200);
+      const out = await gemini(
+        `${WRITER}
+You are her friendly writing tutor. She is writing a few lines about the chapter she just read and is stuck: she tells you, in English or a mix of English and Japanese, what she wants to say, or asks a question about how to say it. Answer her latest message directly; don't make her guess first.
+- "suggestion": the simplest natural way to say what she means in Japanese, at her level (one or two short sentences). Leave it empty only when her message is a question that doesn't need a new sentence (for example "why not 変だと思う?").
+- "words": up to 4 words from the suggestion she may not know, each with "word" as written in the suggestion, "reading" in hiragana, and "meaning" in a few English words. Skip very basic words.
+- "explanation": one to three plain English sentences on how the sentence is built or the answer to her question. Write every Japanese word, particle or ending in Japanese script, never in romaji.
+${question ? `The question she is answering: ${JSON.stringify(question)}
+` : ''}${draft ? `What she has written so far: ${JSON.stringify(draft)}
+` : ''}${chapter ? `For context only, the end of the chapter: ${JSON.stringify(chapter)}
+` : ''}The conversation so far (her latest message is last): ${JSON.stringify(messages)}`,
+        { type: 'OBJECT', properties: { suggestion: { type: 'STRING' }, words: { type: 'ARRAY', items: { type: 'OBJECT', properties: { word: { type: 'STRING' }, reading: { type: 'STRING' }, meaning: { type: 'STRING' } }, required: ['word', 'reading', 'meaning'] } }, explanation: { type: 'STRING' } }, required: ['suggestion', 'words', 'explanation'] },
+      );
+      return json({ suggestion: out.suggestion || '', words: (out.words || []).slice(0, 4), explanation: out.explanation || '' }, 200, cors);
     }
     if (body.mode === 'reviews') {
       const reviews = (body.reviews || []).slice(0, 3).map((r) => ({ title: clip(r.title, 100), body: clip(r.body, 400) }));

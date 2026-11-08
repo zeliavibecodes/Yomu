@@ -30,7 +30,7 @@ async function ask(body) {
 }
 
 let ctx = null;   // the chapter being written about
-let state = null; // { q, hint, words, asked: [], text }
+let state = null; // { q, hint, words, asked: [], text, chat: [] }
 
 // The corrected text, with the parts that changed marked.
 function correctedHtml(segs) {
@@ -48,6 +48,7 @@ function entryHtml(e) {
     ${e.note ? `<p class="wr-note">${esc(e.note)}</p>` : ''}
     ${e.tr ? `<p class="wr-tr">${esc(e.tr)}</p>` : ''}
     ${e.used?.length ? `<p class="wr-used">Words you used: ${e.used.map((w) => `<b>${esc(w)}</b>`).join('、')}</p>` : ''}
+    ${e.chat?.length ? `<p class="lbl wr-asked">You asked</p>${e.chat.map((m) => m.role === 'learner' ? `<p class="wr-ask-me">${esc(m.text)}</p>` : m.suggestion ? `<p class="wr-ask-jp" lang="ja">${esc(m.suggestion)}</p>` : '').join('')}` : ''}
   </div>`;
 }
 
@@ -62,18 +63,31 @@ export async function start() {
 }
 
 function showDone(list) {
-  const box = $('writeBody');
-  box.innerHTML = `${list.slice().reverse().map(entryHtml).join('')}
+  showEntries(list.slice().reverse());
+}
+// Your entries for this chapter, newest first, with ways to carry on.
+function showEntries(list) {
+  const last = list[0];
+  $('writeBody').innerHTML = `${list.map(entryHtml).join('')}
     <div class="wr-actions"><button class="btn primary" id="wrClose">Back to reading</button></div>
-    <button class="text-btn wr-link" id="wrAgain">Write another</button>`;
+    <div class="wr-skips">
+      <button class="text-btn wr-link" id="wrAgain">Write another</button>
+      <button class="text-btn wr-link" id="wrMeant">Help me say what I meant</button>
+    </div>`;
   $('wrClose').onclick = () => Y().closeSheet();
   $('wrAgain').onclick = () => compose(true);
+  // Start a new version from the corrected text, with the tutor open.
+  $('wrMeant').onclick = () => {
+    state = { q: last.q, hint: '', words: [], asked: [], text: correctedText(last.segs), chat: [] };
+    save();
+    openChat();
+  };
 }
 
 async function compose(fresh = false) {
   const k = ctx.bookId + '/' + ctx.chapter;
   const saved = !fresh && drafts()[k];
-  state = saved ? { q: saved.q, hint: saved.hint, words: saved.words || [], asked: saved.asked || [], text: saved.text || '' } : { q: '', hint: '', words: [], asked: [], text: '' };
+  state = saved ? { q: saved.q, hint: saved.hint, words: saved.words || [], asked: saved.asked || [], text: saved.text || '', chat: saved.chat || [] } : { q: '', hint: '', words: [], asked: [], text: '', chat: [] };
   renderCompose();
   if (!state.q) newQuestion();
 }
@@ -82,6 +96,7 @@ function renderCompose(msg = '') {
   const box = $('writeBody');
   box.innerHTML = `<div class="wr-prompt" id="wrPrompt">${promptHtml()}</div>
     <textarea id="wrText" class="wr-text" lang="ja" rows="4" placeholder="ここに書いてください" autocapitalize="off" autocomplete="off" spellcheck="false">${esc(state.text)}</textarea>
+    <button class="text-btn wr-link wr-help" id="wrHelp">${state.chat.length ? 'Back to your questions' : 'Help me say it'}</button>
     <div class="wr-actions"><button class="btn primary" id="wrCheck">Check</button></div>
     <p class="sheet-msg" id="wrMsg">${esc(msg)}</p>
     <div class="wr-skips">
@@ -91,6 +106,7 @@ function renderCompose(msg = '') {
   const ta = $('wrText');
   ta.oninput = () => { state.text = ta.value; save(); };
   $('wrCheck').onclick = check;
+  $('wrHelp').onclick = openChat;
   $('wrSkip').onclick = () => Y().closeSheet();
   $('wrOff').onclick = async () => { await Y().setBookWriting(false); Y().closeSheet(); Y().toast('No writing for this book. Turn it back on from Contents.'); };
   wirePrompt();
@@ -114,7 +130,74 @@ function wirePrompt() {
     ta.focus(); ta.selectionStart = ta.selectionEnd = at + w.length;
   }));
 }
-function save() { setDraft(ctx.bookId + '/' + ctx.chapter, { q: state.q, hint: state.hint, words: state.words, asked: state.asked, text: state.text }); }
+function save() { setDraft(ctx.bookId + '/' + ctx.chapter, { q: state.q, hint: state.hint, words: state.words, asked: state.asked, text: state.text, chat: state.chat }); }
+
+/* ---------- Help me say it: a short chat with a tutor ---------- */
+
+function tutorHtml(m, i) {
+  if (m.role === 'learner') return `<div class="wr-msg me">${esc(m.text)}</div>`;
+  if (m.error) return `<p class="hint wr-msg-err">${esc(m.error)}</p>`;
+  return `<div class="wr-msg tutor">
+    ${m.suggestion ? `<p class="wr-sug" lang="ja">${esc(m.suggestion)}</p>` : ''}
+    ${m.words?.length ? `<ul class="wr-vocab">${m.words.map((w) => `<li><b lang="ja">${esc(w.word)}</b>${w.reading && w.reading !== w.word ? `<span lang="ja">${esc(w.reading)}</span>` : ''}<em>${esc(w.meaning)}</em></li>`).join('')}</ul>` : ''}
+    ${m.explanation ? `<p class="wr-exp">${esc(m.explanation)}</p>` : ''}
+    ${m.suggestion ? `<button class="btn wr-use" data-use="${i}">Add to my text</button>` : ''}
+  </div>`;
+}
+
+function openChat() {
+  const box = $('writeBody');
+  box.innerHTML = `<button class="text-btn wr-link wr-back" id="wrBack">‹ Back to writing</button>
+    ${state.chat.length ? '' : `<p class="hint wr-chat-intro">Say what you want to write, in English or a mix. You’ll get a simple way to say it in Japanese.</p>`}
+    <div id="wrChat" class="wr-chat">${state.chat.map(tutorHtml).join('')}</div>
+    <div class="wr-ask">
+      <textarea id="wrAsk" rows="2" placeholder="I want to say…" autocomplete="off"></textarea>
+      <button class="btn primary" id="wrSend">Ask</button>
+    </div>`;
+  $('wrBack').onclick = () => renderCompose();
+  $('wrSend').onclick = sendHelp;
+  $('wrChat').onclick = (e) => {
+    const b = e.target.closest('[data-use]');
+    if (!b) return;
+    const sug = state.chat[+b.dataset.use]?.suggestion || '';
+    state.text = state.text ? state.text.replace(/\s+$/, '') + sug : sug;
+    save();
+    renderCompose('Added to your text. Change it as you like, then tap Check.');
+  };
+  const last = $('wrChat').lastElementChild;
+  if (last) last.scrollIntoView({ block: 'start' });
+}
+
+async function sendHelp() {
+  const ask_ = $('wrAsk'), text = ask_.value.trim();
+  if (!text) return;
+  const forCtx = ctx;
+  state.chat.push({ role: 'learner', text });
+  save();
+  ask_.value = '';
+  $('wrSend').disabled = true;
+  const chat = $('wrChat');
+  chat.insertAdjacentHTML('beforeend', tutorHtml(state.chat[state.chat.length - 1]) + '<p class="hint wr-wait" id="wrThinking">Thinking…</p>');
+  chat.lastElementChild.scrollIntoView({ block: 'end', behavior: 'smooth' });
+  let reply;
+  try {
+    const out = await ask({
+      mode: 'help', question: state.q, draft: state.text, chapter: forCtx.text.slice(-1200),
+      messages: state.chat.filter((m) => !m.error).map((m) => ({ role: m.role, text: m.role === 'learner' ? m.text : [m.suggestion, m.explanation].filter(Boolean).join(' — ') })),
+    });
+    reply = { role: 'tutor', suggestion: out.suggestion, words: out.words, explanation: out.explanation };
+    state.chat.push(reply);
+    save();
+  } catch (e) {
+    reply = { role: 'tutor', error: e.code === 'offline' ? 'You’re offline. Ask again when you’re back online.' : e.message };
+  }
+  if (ctx !== forCtx || !$('wrChat')) return;
+  $('wrThinking')?.remove();
+  $('wrSend').disabled = false;
+  const i = reply.error ? -1 : state.chat.length - 1;
+  chat.insertAdjacentHTML('beforeend', tutorHtml(reply, i));
+  chat.lastElementChild.scrollIntoView({ block: 'start', behavior: 'smooth' });
+}
 
 async function newQuestion() {
   const forCtx = ctx;
@@ -156,16 +239,13 @@ async function check() {
     id: Date.now().toString(36), at: Date.now(), book: forCtx.bookId, title: forCtx.bookTitle, chapter: forCtx.chapter,
     q: state.q, text, segs: out.segments, note: out.note, tr: out.translation,
     used: forCtx.tapped.filter((w) => fixed.includes(w)),
+    chat: state.chat.filter((m) => m.role === 'learner' || m.suggestion).map((m) => (m.role === 'learner' ? { role: 'learner', text: m.text } : { role: 'tutor', suggestion: m.suggestion })),
   };
   setJournal([...journal(), entry]);
   setDraft(forCtx.bookId + '/' + forCtx.chapter, null);
   Y().refreshWrite();
   if (ctx !== forCtx || !$('writeBody')) return;
-  $('writeBody').innerHTML = `${entryHtml(entry)}
-    <div class="wr-actions"><button class="btn primary" id="wrClose">Back to reading</button></div>
-    <button class="text-btn wr-link" id="wrAgain">Write another</button>`;
-  $('wrClose').onclick = () => Y().closeSheet();
-  $('wrAgain').onclick = () => compose(true);
+  showEntries([entry]);
 }
 
 // Everything you wrote about one book, newest first.
