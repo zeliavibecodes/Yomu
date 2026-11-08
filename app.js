@@ -2071,7 +2071,7 @@ async function renderShelf() {
   const books = [...reading.filter((b) => b !== hero), ...done];
   $('emptyShelf').hidden = books.length > 0 || !!hero;
   const count = all.length;
-  $('libSub').textContent = count ? `${count} ${count === 1 ? 'book' : 'books'}${done.length ? ` · ${done.length} finished` : ''}` : '';
+  $('libSub').textContent = count ? `${count} ${count === 1 ? 'book' : 'books'}` : '';
   $('libSub').parentElement.hidden = !count;
   $('editBtn').hidden = books.length === 0 || !$('discoverView').hidden;
   if (!books.length) editing = false;

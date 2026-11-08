@@ -1,5 +1,5 @@
 // Keeps the app itself available offline. Books live in IndexedDB, not here.
-const VERSION = 'yomu-v48';
+const VERSION = 'yomu-v49';
 const FILES = ['./', 'index.html', 'style.css', 'app.js', 'vendor/jszip.min.js', 'offline-dict.js', 'discover.js', 'webnovel.js', 'webdiscover.js', 'learn.js', 'write.js', 'manifest.webmanifest', 'bg/room.jpg', 'bg/grid.jpg', 'bg/tunnel.jpg', 'bg/haze.jpg', 'bg/room-thumb.jpg', 'bg/grid-thumb.jpg', 'bg/tunnel-thumb.jpg', 'bg/haze-thumb.jpg', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', (e) => {
