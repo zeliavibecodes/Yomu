@@ -1050,8 +1050,8 @@ async function buildChapter(index, { images = true } = {}) {
   else if (kk && !kk.finished) end.innerHTML = '<div class="more"><button class="btn" id="moreEpisodes">Check for new episodes</button><p class="hint" id="moreMsg">The author is still writing this story.</p></div>';
   else end.innerHTML = finishHtml(reader.book);
   // Learn the words added while reading, right after the chapter.
-  const learnN = learnList().length;
-  end.insertAdjacentHTML('afterbegin', `<button class="btn primary chapter-learn" id="chapterLearn" ${learnN ? '' : 'hidden'}>Learn ${learnN} new word${learnN === 1 ? '' : 's'}</button>`);
+  const learnN = learnList().length + lookedUpList().length;
+  end.insertAdjacentHTML('afterbegin', `<button class="btn primary chapter-learn" id="chapterLearn" ${learnN ? '' : 'hidden'}>${learnLabel()}</button>`);
   root.appendChild(end);
 
   // Find the paragraphs worth sending to jpdb.
@@ -1473,7 +1473,32 @@ function openWord(el) {
   $('knownBtn').disabled = false;
   $('wMsg').textContent = '';
   if (v.gap) openGap(v);
+  noteTap(v, s);
   openSheet('wordSheet');
+}
+
+/* Words you tap that are already in your decks go into the end-of-chapter session:
+   - never studied yet: learned with this sentence, so jpdb starts its reviews now;
+   - studied before: reviewed in this sentence, and your grade goes to jpdb. */
+const LOOKED_KEY = 'yomu.lookedup';
+function lookedUpList() { try { return JSON.parse(localStorage.getItem(LOOKED_KEY) || '[]'); } catch { return []; } }
+function setLookedUp(l) { try { localStorage.setItem(LOOKED_KEY, JSON.stringify(l.slice(-60))); } catch {} }
+function baseState(state) { return !state ? null : state[0] === 'redundant' || state[0] === 'locked' ? state[1] || state[0] : state[0]; }
+function noteTap(v, sentence) {
+  if (!v?.vid || !settings.key) return;
+  const st = baseState(v.state);
+  if (st === 'new') return rememberForLearning(v, sentence);
+  if (!['learning', 'known', 'never-forget', 'due', 'failed'].includes(st)) return;
+  const l = lookedUpList().filter((x) => !(x.vid === v.vid && x.sid === v.sid));
+  l.push({ vid: v.vid, sid: v.sid, spelling: v.spelling, reading: v.reading, meanings: (v.meanings || []).slice(0, 3),
+    sentence: { before: sentence.before, word: sentence.word, after: sentence.after },
+    book: reader.book?.title ? shortTitle(reader.book.title) : '', at: Date.now(), review: true });
+  setLookedUp(l);
+  refreshLearn();
+}
+function reviewedLookedUp(it) {
+  setLookedUp(lookedUpList().filter((x) => !(x.vid === it.vid && x.sid === it.sid)));
+  refreshLearn();
 }
 
 // A word jpdb doesn't have, usually a name. Use the book's own reading and the
@@ -1543,13 +1568,19 @@ function learned(it) {
   refreshLearn();
 }
 // The small "learn" button in the reading bar, and the one at the end of a chapter.
+function learnLabel() {
+  const n = learnList().length, r = lookedUpList().length;
+  if (!r) return `Learn ${n} new word${n === 1 ? '' : 's'}`;
+  if (!n) return `Review ${r} word${r === 1 ? '' : 's'} you looked up`;
+  return `Learn and review ${n + r} words`;
+}
 function refreshLearn() {
-  const n = learnList().length;
+  const n = learnList().length + lookedUpList().length;
   $('learnBtn').hidden = !n;
   $('learnCount').textContent = n;
-  $('learnBtn').setAttribute('aria-label', `Learn ${n} new word${n === 1 ? '' : 's'}`);
+  $('learnBtn').setAttribute('aria-label', learnLabel());
   const end = $('chapterLearn');
-  if (end) { end.hidden = !n; end.textContent = `Learn ${n} new word${n === 1 ? '' : 's'}`; }
+  if (end) { end.hidden = !n; end.textContent = learnLabel(); }
 }
 async function startLearning() {
   (await import(`./learn.js${V}`)).start();
@@ -1578,6 +1609,7 @@ async function addCurrent(deckId, newState, doneMsg) {
     v.state = newState;
     updateWordEverywhere(v);
     if (deckId !== 'never-forget') rememberForLearning(v, sentence);
+    else reviewedLookedUp(v);
     $('wMsg').textContent = doneMsg;
   } catch (e) {
     if (e.code === 'offline') queueIt();
@@ -2150,7 +2182,7 @@ function init() {
 window.yomu = {
   get settings() { return settings; }, speed, vocab, parseTexts, toast, openSheet, closeSheet,
   addBookBuffer, findAozoraBook, findWebBook, openBook,
-  jpdb, learnList, learned, refreshLearn,
+  jpdb, learnList, learned, refreshLearn, lookedUpList, reviewedLookedUp,
 };
 
 init();

@@ -9,7 +9,7 @@ const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<
 // Grades as jpdb names them, with the labels shown here.
 const GRADES = [['nothing', 'Forgot'], ['hard', 'Hard'], ['okay', 'Okay'], ['easy', 'Easy']];
 
-const session = { queue: [], done: 0, total: 0, again: new Set(), shown: false, busy: false, locked: [], notTaken: 0 };
+const session = { queue: [], done: 0, total: 0, again: new Set(), shown: false, busy: false, locked: [], notTaken: 0, reviewed: 0 };
 
 // jpdb's page for a word, where a locked word can be unlocked.
 const jpdbPage = (it) => `https://jpdb.io/vocabulary/${it.vid}/${encodeURIComponent(it.spelling)}`;
@@ -26,23 +26,34 @@ async function states(list) {
 
 export async function start() {
   let list = Y().learnList();
-  if (!list.length) return Y().toast('No new words to learn.');
+  let looked = Y().lookedUpList();
+  if (!list.length && !looked.length) return Y().toast('No words to learn.');
   Y().openSheet('learnSheet');
   $('learnBody').innerHTML = '<p class="hint d-loading">Checking your words on jpdb…</p>';
   // Words already learned on jpdb don't need a card here. Words jpdb lists as locked (kanji not
   // learned yet) stay in the session and are marked, so you can see whether jpdb takes them.
-  const st = await states(list);
+  const st = await states([...list, ...looked]);
   if (st) {
     for (const it of list) if (!isNew(st.get(key(it)))) Y().learned(it);
     list = Y().learnList();
     for (const it of list) it.lockedOnJpdb = isLocked(st.get(key(it)));
+    // A looked-up word no longer in your decks, or reset to new, has nothing to review.
+    for (const it of looked) { const s = st.get(key(it)); if (!s || isNew(s)) Y().reviewedLookedUp(it); }
+    looked = Y().lookedUpList();
   }
-  Object.assign(session, { queue: [...list], done: 0, total: list.length, again: new Set(), shown: false, busy: false, locked: [], notTaken: 0 });
+  // New words first, then the words you looked up.
+  const queue = [...list, ...looked.map((it) => ({ ...it, review: true }))];
+  Object.assign(session, { queue, done: 0, total: queue.length, again: new Set(), shown: false, busy: false, locked: [], notTaken: 0, reviewed: 0 });
   render();
 }
 
 function learnedLine() {
-  const ok = session.done - session.notTaken;
+  const ok = session.done - session.notTaken - session.reviewed;
+  const rv = session.reviewed ? ` ${session.reviewed} ${session.reviewed === 1 ? 'word you looked up was' : 'words you looked up were'} reviewed on jpdb.` : '';
+  if (!ok && !session.notTaken) return rv.trim();
+  return learnedLineNew(ok) + rv;
+}
+function learnedLineNew(ok) {
   const okText = `${ok} ${ok === 1 ? 'word is' : 'words are'} now in your jpdb reviews.`;
   return session.notTaken ? `${ok ? okText + ' ' : ''}jpdb didn’t start ${session.notTaken} ${session.notTaken === 1 ? 'word' : 'words'}, so ${session.notTaken === 1 ? 'it’s' : 'they’re'} kept here for next time.` : okText;
 }
@@ -75,9 +86,9 @@ function render() {
   box.innerHTML = `${session.done === 0 && !session.shown ? lockedHtml() : ''}
     <p class="ln-progress">${Math.min(session.done + 1, session.total)} of ${session.total}${session.again.has(key(it)) ? ' · once more' : ''}</p>
     <div class="ln-card">
-      <ruby class="ln-word">${esc(it.spelling)}<rt>${session.shown || !session.again.has(key(it)) ? esc(reading) : ''}</rt></ruby>
+      <ruby class="ln-word">${esc(it.spelling)}<rt>${session.shown || (!session.again.has(key(it)) && !it.review) ? esc(reading) : ''}</rt></ruby>
       ${sentence ? `<p class="ln-sentence">${sentence}</p>` : ''}
-      ${it.book ? `<p class="ln-book">From ${esc(it.book)}</p>` : ''}
+      ${it.book ? `<p class="ln-book">${it.review ? 'You looked this up in' : 'From'} ${esc(it.book)}</p>` : ''}
       ${it.lockedOnJpdb ? '<p class="ln-book">jpdb lists this word as locked</p>' : ''}
     </div>
     ${session.shown ? `
@@ -107,10 +118,21 @@ async function grade(it, g) {
   $('lnMsg').textContent = 'Saving…';
   try {
     await Y().jpdb('review', { vid: it.vid, sid: it.sid, grade: g });
-    // Check that jpdb really started the word; if it's still new, keep it for next time.
-    const after = (await states([it]))?.get(key(it));
-    if (after !== undefined && isNew(after)) session.notTaken++;
-    else Y().learned(it);
+    if (it.review) {
+      // Keep the sentence where you looked it up on the jpdb card, so reviews there show it too.
+      const s = it.sentence || {};
+      const full = (s.before || '') + (s.word || '') + (s.after || '');
+      if (Y().settings.sentence && s.word && full.length <= 300) {
+        try { await Y().jpdb('set-card-sentence', { vid: it.vid, sid: it.sid, sentence: full }); } catch {}
+      }
+      Y().reviewedLookedUp(it);
+      session.reviewed++;
+    } else {
+      // Check that jpdb really started the word; if it's still new, keep it for next time.
+      const after = (await states([it]))?.get(key(it));
+      if (after !== undefined && isNew(after)) session.notTaken++;
+      else Y().learned(it);
+    }
     session.done++;
     session.queue.shift();
     if (g === 'nothing') { session.again.add(key(it)); session.queue.push(it); }
