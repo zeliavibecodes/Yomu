@@ -8,6 +8,8 @@
 // POST { mode: 'prompt', book, chapter, words, avoid }             → { question, hint, words }
 // POST { mode: 'help', messages: [{ role, text }], question, draft, chapter } → { suggestion, words: [{ word, reading, meaning }], explanation }
 // POST { mode: 'correct', text, question, chapter }                → { segments: [{ text, changed, was }], note, translation }
+// POST { mode: 'journal-ask', text, avoid }                         → { question, hint }   (Hibi's journal: a topic, or a follow-up to what she wrote)
+// 'correct' and 'help' also take journal: true, for Hibi's journal instead of a book chapter.
 
 const ORIGINS = [/^https:\/\/zeliavibecodes\.github\.io$/, /^http:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?$/];
 const MODELS = [process.env.GEMINI_MODEL, 'gemini-3.5-flash-lite', 'gemini-flash-latest'].filter(Boolean);
@@ -99,11 +101,28 @@ The chapter (it may be cut in the middle): ${JSON.stringify(chapter)}`,
       );
       return json({ question: out.question || '', hint: out.hint || '', words: (out.words || []).filter((w) => words.includes(w)).slice(0, 4) }, 200, cors);
     }
+    if (body.mode === 'journal-ask') {
+      const text = clip(body.text, 800);
+      const avoid = (body.avoid || []).slice(0, 8).map((q) => clip(q, 200));
+      const out = await gemini(
+        `${WRITER}
+She keeps a short daily journal in Japanese about her own life. ${text
+  ? `Here is what she wrote today. Ask her ONE follow-up question that helps her say more about it: a detail, why, how she felt, or what happens next. Make it about something she actually wrote.`
+  : `Give her ONE easy question about her day or her life to write about today (for example what she ate, where she went, something she noticed, something she is looking forward to). Keep it everyday and personal, never a quiz.`}
+- Write "question" in simple, natural Japanese, friendly and short (under 30 characters). Use kanji only for common words.
+- "hint": a natural English translation of the question.
+${avoid.length ? `Ask something different from these earlier questions: ${JSON.stringify(avoid)}
+` : ''}${text ? `What she wrote: ${JSON.stringify(text)}` : ''}`,
+        { type: 'OBJECT', properties: { question: { type: 'STRING' }, hint: { type: 'STRING' } }, required: ['question', 'hint'] },
+        0.9,
+      );
+      return json({ question: out.question || '', hint: out.hint || '' }, 200, cors);
+    }
     if (body.mode === 'correct') {
       const text = clip(body.text, 600), question = clip(body.question, 200), chapter = clip(body.chapter, 1500);
       if (!text.trim()) return json({ error: 'Nothing to check' }, 400, cors);
       const prompt = `${WRITER}
-She wrote the Japanese below${question ? ` in answer to the question ${JSON.stringify(question)}` : ' about the chapter she just read'}. Correct it so it is natural and grammatically correct.
+She wrote the Japanese below${body.journal ? ' in her daily journal' : ''}${question ? ` in answer to the question ${JSON.stringify(question)}` : body.journal ? '' : ' about the chapter she just read'}. Correct it so it is natural and grammatically correct.
 - Correct ALL of it: every sentence she wrote must appear in the corrected text, in the same order. Never drop or merge away a sentence, even one that is hard to fix.
 - Keep her meaning, her ideas and her level. Change as little as possible and don't make it fancier than it needs to be.
 - "segments": the corrected text split into pieces, in order. Joined together, the pieces must equal the corrected text exactly. Mark each piece "changed": true if it differs from what she wrote, with "was" set to what she wrote in its place (an empty string if the piece is new). Unchanged pieces have "changed": false and "was" empty. Keep changed pieces as small as possible.
@@ -127,7 +146,7 @@ ${chapter ? `For context only, the end of the chapter: ${JSON.stringify(chapter)
       const question = clip(body.question, 200), draft = clip(body.draft, 600), chapter = clip(body.chapter, 1200);
       const out = await gemini(
         `${WRITER}
-You are her friendly writing tutor. She is writing a few lines about the chapter she just read and is stuck: she tells you, in English or a mix of English and Japanese, what she wants to say, or asks a question about how to say it. Answer her latest message directly; don't make her guess first.
+You are her friendly writing tutor. She is writing ${body.journal ? 'a few lines in her daily journal about her own life' : 'a few lines about the chapter she just read'} and is stuck: she tells you, in English or a mix of English and Japanese, what she wants to say, or asks a question about how to say it. Answer her latest message directly; don't make her guess first.
 - "suggestion": the simplest natural way to say what she means in Japanese, at her level (one or two short sentences). Leave it empty only when her message is a question that doesn't need a new sentence (for example "why not 変だと思う?").
 - "words": up to 4 words from the suggestion she may not know, each with "word" as written in the suggestion, "reading" in hiragana, and "meaning" in a few English words. Skip very basic words.
 - "explanation": one to three plain English sentences on how the sentence is built or the answer to her question. Write every Japanese word, particle or ending in Japanese script, never in romaji.
