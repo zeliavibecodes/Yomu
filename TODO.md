@@ -7,6 +7,7 @@ In order. Done items move to the bottom.
 
 ## Done
 
+- Write about each chapter: a question about it, suggested words from your taps, corrections from Gemini, and a journal per book
 - Read EPUBs vertically or horizontally, with jpdb readings, tap-to-look-up and add-to-deck
 - Japanese typesetting based on the W3C's Japanese layout requirements
 - Light, dark and match-phone appearance; Mincho or Gothic

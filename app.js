@@ -12,7 +12,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 /* =========================================================
    Settings (small values, kept in localStorage)
    ========================================================= */
-const DEFAULTS = { key: '', deck: '', furigana: 'unknown', direction: 'vertical', size: 19, sentence: true, theme: 'auto', font: 'mincho', underline: false, animate: true, awake: true, ghToken: '', gistId: '' };
+const DEFAULTS = { key: '', deck: '', furigana: 'unknown', direction: 'vertical', size: 19, sentence: true, theme: 'auto', font: 'mincho', underline: false, animate: true, awake: true, ghToken: '', gistId: '', writing: true };
 const settings = { ...DEFAULTS };
 if (matchMedia('(prefers-reduced-motion: reduce)').matches) settings.animate = false;
 try { Object.assign(settings, JSON.parse(localStorage.getItem('yomu.settings') || '{}')); } catch {}
@@ -39,6 +39,7 @@ function applySettings() {
   $('marksToggle').checked = settings.underline;
   $('animateToggle').checked = settings.animate;
   $('awakeToggle').checked = settings.awake;
+  $('writingToggle').checked = settings.writing;
   $('keyNotice').hidden = !!settings.key;
 }
 
@@ -1053,6 +1054,8 @@ async function buildChapter(index, { images = true } = {}) {
   const learnN = learnList().length + lookedUpList().length;
   end.insertAdjacentHTML('afterbegin', `<button class="btn primary chapter-learn" id="chapterLearn" ${learnN ? '' : 'hidden'}>${learnLabel()}</button>`);
   end.insertAdjacentHTML('afterbegin', `<div class="chapter-taps" id="chapterTaps">${tapSummaryHtml(index)}</div>`);
+  // Write a line or two about the chapter, unless you've turned writing off.
+  end.querySelector('#chapterLearn').insertAdjacentHTML('afterend', `<button class="btn chapter-write" id="chapterWrite" ${writingOn() ? '' : 'hidden'}>${writeLabel(index)}</button>`);
   root.appendChild(end);
 
   // Find the paragraphs worth sending to jpdb.
@@ -1621,6 +1624,50 @@ function refreshLearn() {
   const end = $('chapterLearn');
   if (end) { end.hidden = !n; end.textContent = learnLabel(); }
 }
+/* ---------- Write about the chapter (write.js) ---------- */
+const writingOn = () => settings.writing && !reader.book?.noWriting;
+function journalCount(bookId, chapter) {
+  try { return JSON.parse(localStorage.getItem('yomu.journal') || '[]').filter((e) => e.book === bookId && (chapter === undefined || e.chapter === chapter)).length; } catch { return 0; }
+}
+function writeLabel(chapter) {
+  return reader.book && journalCount(reader.book.id, chapter) ? 'What you wrote' : 'Write about this chapter';
+}
+function refreshWrite() {
+  const b = $('text').querySelector('#chapterWrite');
+  if (!b) return;
+  const wasHidden = b.hidden;
+  b.hidden = !writingOn();
+  b.textContent = writeLabel(reader.chapter);
+  if (wasHidden !== b.hidden) relayoutKeeping(currentBlock());
+}
+async function setBookWriting(on) {
+  if (!reader.book) return;
+  if (on) delete reader.book.noWriting; else reader.book.noWriting = true;
+  await db.put('books', reader.book);
+  refreshWrite();
+}
+// What write.js needs to know about the chapter you just read.
+function writingContext() {
+  if (!reader.book) return null;
+  const entry = tapLog()[reader.book.id + '/' + reader.chapter];
+  const tapped = entry ? Object.values(entry.w).sort((a, b) => b.n - a.n).map((w) => w.s) : [];
+  let text = reader.blocks.map((b) => extract(b).text.replace(/\s+/g, '')).join('\n');
+  if (text.length > 3200) text = text.slice(0, 900) + '\n…\n' + text.slice(-2200);
+  const title = reader.book.web || reader.book.kakuyomu ? shortTitle(reader.book.title) : reader.book.title;
+  return { bookId: reader.book.id, bookTitle: title, chapter: reader.chapter, text, tapped };
+}
+async function startWriting() {
+  (await import(`./write.js${V}`)).start();
+}
+// The writing row in Contents: read what you wrote, or turn writing back on.
+function showWritingRow() {
+  const n = journalCount(reader.book.id);
+  const off = settings.writing && reader.book.noWriting;
+  $('writingRow').hidden = !n && !off;
+  $('writingMsg').textContent = [n ? `${n} ${n === 1 ? 'entry' : 'entries'} for this book` : '', off ? 'Writing is off for this book.' : ''].filter(Boolean).join(' ');
+  $('writingReadBtn').hidden = !n;
+  $('writingOnBtn').hidden = !off;
+}
 async function startLearning() {
   (await import(`./learn.js${V}`)).start();
 }
@@ -2105,10 +2152,16 @@ function init() {
       loadChapter(spine.indexOf(t.href), { frag: t.frag });
     };
     showOfflineState();
+    showWritingRow();
     openSheet('tocSheet');
   });
   $('readerSettingsBtn').addEventListener('click', () => openSheet('settingsSheet'));
   $('offlineBtn').addEventListener('click', () => saveWholeBook());
+  $('writingReadBtn').addEventListener('click', async () => {
+    const title = reader.book.web || reader.book.kakuyomu ? shortTitle(reader.book.title) : reader.book.title;
+    (await import(`./write.js${V}`)).openJournal(reader.book.id, title);
+  });
+  $('writingOnBtn').addEventListener('click', async () => { await setBookWriting(true); showWritingRow(); toast('Writing is back on for this book.'); });
   window.addEventListener('online', flushPending);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') { flushPending(); checkRemoteWhileReading(); if (reader.book) readClock.at = Date.now(); }
@@ -2140,6 +2193,7 @@ function init() {
   $('text').addEventListener('click', (e) => {
     if (e.target.closest('#nextChapter')) return loadChapter(reader.chapter + 1);
     if (e.target.closest('#chapterLearn')) return startLearning();
+    if (e.target.closest('#chapterWrite')) return startWriting();
     if (e.target.closest('#moreEpisodes')) return moreEpisodes();
     const link = e.target.closest('[data-target]');
     if (link) {
@@ -2199,6 +2253,7 @@ function init() {
   $('marksToggle').addEventListener('change', (e) => { settings.underline = e.target.checked; saveSettings(); });
   $('animateToggle').addEventListener('change', (e) => { settings.animate = e.target.checked; saveSettings(); });
   $('awakeToggle').addEventListener('change', (e) => { settings.awake = e.target.checked; saveSettings(); keepAwake(); });
+  $('writingToggle').addEventListener('change', (e) => { settings.writing = e.target.checked; saveSettings(); refreshWrite(); });
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') return closeSheet();
@@ -2222,6 +2277,7 @@ window.yomu = {
   get settings() { return settings; }, speed, vocab, parseTexts, toast, openSheet, closeSheet,
   addBookBuffer, findAozoraBook, findWebBook, openBook,
   jpdb, learnList, learned, refreshLearn, lookedUpList, reviewedLookedUp,
+  writingContext, setBookWriting, refreshWrite,
 };
 
 init();

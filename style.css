@@ -649,3 +649,35 @@ button.add-book { border: 0; font-family: inherit; }
 .ex-part span { font-family: var(--ui); font-size: 13px; font-weight: 400; color: var(--muted); margin-left: 8px; }
 .ex-exp { margin: 0; font-size: 15px; line-height: 1.5; color: var(--ink-2); }
 .ex-wait { padding: 10px 0; }
+
+/* Write about the chapter */
+.chapter-end .chapter-write { writing-mode: horizontal-tb; }
+.wr-prompt { background: var(--fill); border-radius: 18px; padding: 20px 18px 14px; margin-bottom: 14px; }
+.wr-q { font-family: var(--mincho); font-size: 20px; font-weight: 600; line-height: 1.6; margin: 0 0 6px; }
+.wr-hint { font-size: 14px; line-height: 1.45; color: var(--muted); margin: 0 0 12px; }
+.wr-words { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); margin: 0 0 6px; }
+.wr-word { border: 0; border-radius: 999px; padding: 6px 11px; background: var(--raised); color: var(--ink); font-family: var(--mincho); font-size: 15px; }
+.wr-word:active { opacity: 0.6; }
+.wr-wait { margin: 0 0 6px; }
+.wr-link { font-size: 14px; color: var(--muted); padding: 6px 0; }
+.wr-text {
+  display: block; width: 100%; min-height: 120px; resize: vertical; border: 0; border-radius: 14px;
+  padding: 14px; background: var(--fill); color: var(--ink); appearance: none; -webkit-appearance: none;
+  font-family: var(--mincho); font-size: 18px; line-height: 1.7;
+}
+.wr-text::placeholder { color: var(--faint); }
+.wr-actions { display: flex; margin-top: 14px; }
+.wr-actions .btn { flex: 1; }
+.wr-skips { display: flex; justify-content: space-between; margin-top: 4px; }
+.wr-entry { padding-bottom: 6px; }
+.wr-entry + .wr-entry, .wr-entry + .wr-date { border-top: 0.5px solid var(--hair); padding-top: 18px; margin-top: 12px; }
+.wr-q-small { font-family: var(--mincho); font-size: 15px; color: var(--muted); margin: 0 0 14px; }
+.wr-mine { font-family: var(--mincho); font-size: 17px; line-height: 1.75; color: var(--ink-2); margin: 0 0 16px; }
+.wr-fixed { font-family: var(--mincho); font-size: 19px; line-height: 1.75; margin: 0 0 12px; padding: 12px 14px; background: var(--fill); border-radius: 12px; }
+.wr-fixed mark { background: none; color: var(--ink); font-weight: 600; text-decoration: underline; text-decoration-thickness: 1.5px; text-underline-offset: 0.3em; }
+.wr-note { font-size: 15px; line-height: 1.5; color: var(--ink-2); margin: 0 0 8px; }
+.wr-tr { font-size: 14px; line-height: 1.45; color: var(--muted); margin: 0 0 8px; }
+.wr-used { font-size: 13px; color: var(--muted); margin: 0; }
+.wr-used b { font-family: var(--mincho); font-weight: 500; color: var(--ink); }
+.wr-book { margin: 0 2px 14px; }
+.wr-date { font-size: 12px; color: var(--faint); margin: 0 0 6px; }

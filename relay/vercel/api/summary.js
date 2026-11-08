@@ -5,6 +5,8 @@
 // POST { mode: 'story', story: { title, pitch, intro, tags } }   → { title, summary }
 // POST { mode: 'reviews', reviews: [{ title, body }] }            → { reviews: [{ title, body }] }
 // POST { mode: 'explain', text, context }                         → { translation, literal, points: [{ part, reading, explanation }] }
+// POST { mode: 'prompt', book, chapter, words, avoid }             → { question, hint, words }
+// POST { mode: 'correct', text, question, chapter }                → { segments: [{ text, changed, was }], note, translation }
 
 const ORIGINS = [/^https:\/\/zeliavibecodes\.github\.io$/, /^http:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?$/];
 const MODELS = [process.env.GEMINI_MODEL, 'gemini-3.5-flash-lite', 'gemini-flash-latest'].filter(Boolean);
@@ -20,7 +22,7 @@ export function OPTIONS(request) {
   return new Response(null, { headers: { ...corsFor(request), 'Access-Control-Allow-Methods': 'POST', 'Access-Control-Allow-Headers': 'Content-Type' } });
 }
 
-async function gemini(prompt, schema) {
+async function gemini(prompt, schema, temperature = 0.3) {
   const key = process.env.GEMINI_API_KEY;
   let last = '';
   for (const model of MODELS) {
@@ -32,7 +34,7 @@ async function gemini(prompt, schema) {
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
       body: JSON.stringify({
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: { responseMimeType: 'application/json', responseSchema: schema, temperature: 0.3 },
+        generationConfig: { responseMimeType: 'application/json', responseSchema: schema, temperature },
       }),
     });
     } catch (e) { last = `${model}: no answer (${e.name})`; continue; }
@@ -46,6 +48,7 @@ async function gemini(prompt, schema) {
   throw new Error(last);
 }
 
+const WRITER = 'You help an English speaker who reads Japanese novels as a learner (past beginner, not yet intermediate) practise writing in Japanese. Explanations are in plain, everyday English: no jargon, no exclamation marks.';
 const STYLE = 'Write for an English speaker who is learning Japanese and deciding whether to read this web novel. Use plain, everyday English. No hype, no exclamation marks, no Japanese words, no spoilers beyond the setup.';
 
 export async function POST(request) {
@@ -75,6 +78,42 @@ ${context && context !== text ? `The passage comes from this part of the book, f
         { type: 'OBJECT', properties: { translation: { type: 'STRING' }, literal: { type: 'STRING' }, points: { type: 'ARRAY', items: { type: 'OBJECT', properties: { part: { type: 'STRING' }, reading: { type: 'STRING' }, explanation: { type: 'STRING' } }, required: ['part', 'reading', 'explanation'] } } }, required: ['translation', 'points'] },
       );
       return json({ translation: out.translation || '', literal: out.literal || '', points: out.points || [] }, 200, cors);
+    }
+    if (body.mode === 'prompt') {
+      const chapter = clip(body.chapter, 3200), book = clip(body.book, 200);
+      const words = (body.words || []).slice(0, 12).map((w) => clip(w, 30)).filter(Boolean);
+      const avoid = (body.avoid || []).slice(0, 8).map((q) => clip(q, 200));
+      const out = await gemini(
+        `${WRITER}
+She has just finished a chapter${book ? ` of ${JSON.stringify(book)}` : ''}. Ask her ONE question about it that she can answer in one or two short Japanese sentences.
+- Write "question" in simple, natural Japanese, friendly and short (under 30 characters). Use kanji only for common words.
+- Make it about this chapter: name a character, place or event from it. Ask what she thought or felt, how a character felt, what she would do in their place, what might happen next, or her favourite moment. Never a quiz with one right answer.
+- "hint": a natural English translation of the question.
+- "words": from the words she looked up while reading, pick up to 4 that would fit naturally in an answer, copied exactly as listed. Leave it empty if none fit.
+${avoid.length ? `Ask something different from these earlier questions: ${JSON.stringify(avoid)}
+` : ''}Words she looked up: ${JSON.stringify(words)}
+The chapter (it may be cut in the middle): ${JSON.stringify(chapter)}`,
+        { type: 'OBJECT', properties: { question: { type: 'STRING' }, hint: { type: 'STRING' }, words: { type: 'ARRAY', items: { type: 'STRING' } } }, required: ['question', 'hint', 'words'] },
+        0.9,
+      );
+      return json({ question: out.question || '', hint: out.hint || '', words: (out.words || []).filter((w) => words.includes(w)).slice(0, 4) }, 200, cors);
+    }
+    if (body.mode === 'correct') {
+      const text = clip(body.text, 600), question = clip(body.question, 200), chapter = clip(body.chapter, 1500);
+      if (!text.trim()) return json({ error: 'Nothing to check' }, 400, cors);
+      const out = await gemini(
+        `${WRITER}
+She wrote the Japanese below${question ? ` in answer to the question ${JSON.stringify(question)}` : ' about the chapter she just read'}. Correct it so it is natural and grammatically correct.
+- Keep her meaning, her ideas and her level. Change as little as possible and don't make it fancier than it needs to be.
+- "segments": the corrected text split into pieces, in order. Joined together, the pieces must equal the corrected text exactly. Mark each piece "changed": true if it differs from what she wrote, with "was" set to what she wrote in its place (an empty string if the piece is new). Unchanged pieces have "changed": false and "was" empty. Keep changed pieces as small as possible.
+- "note": one or two plain English sentences about the most useful fix and why. Write any Japanese words in Japanese, never in romaji. If her text was already natural, return it as one unchanged piece and say in one short sentence what works well.
+- "translation": a natural English translation of the corrected text.
+${chapter ? `For context only, the end of the chapter: ${JSON.stringify(chapter)}
+` : ''}What she wrote: ${JSON.stringify(text)}`,
+        { type: 'OBJECT', properties: { segments: { type: 'ARRAY', items: { type: 'OBJECT', properties: { text: { type: 'STRING' }, changed: { type: 'BOOLEAN' }, was: { type: 'STRING' } }, required: ['text', 'changed', 'was'] } }, note: { type: 'STRING' }, translation: { type: 'STRING' } }, required: ['segments', 'note', 'translation'] },
+      );
+      const segments = (out.segments || []).filter((x) => x && typeof x.text === 'string').map((x) => ({ text: x.text, changed: !!x.changed, was: x.was || '' }));
+      return json({ segments: segments.length ? segments : [{ text, changed: false, was: '' }], note: out.note || '', translation: out.translation || '' }, 200, cors);
     }
     if (body.mode === 'reviews') {
       const reviews = (body.reviews || []).slice(0, 3).map((r) => ({ title: clip(r.title, 100), body: clip(r.body, 400) }));
