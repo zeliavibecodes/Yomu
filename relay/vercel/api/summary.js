@@ -51,8 +51,8 @@ async function gemini(prompt, schema, temperature = 0.3) {
   throw new Error(last);
 }
 
-const WRITER = 'You help an English speaker who reads Japanese novels as a learner (past beginner, not yet intermediate) practise writing in Japanese. Explanations are in plain, everyday English: no jargon, no exclamation marks.';
-// Hibi's journal aims higher than Yomu's chapter writing: around JLPT N3.
+const WRITER = 'You help an English speaker who reads Japanese novels as a learner practise writing in Japanese. Aim at JLPT N3: she is moving from N4 to N3 and wants to be pushed there. Explanations are in plain, everyday English: no jargon, no exclamation marks.';
+// Yomu's chapter writing and Hibi's journal both aim at JLPT N3.
 const JOURNAL = 'You help an English speaker practise writing Japanese in a daily journal. Aim at JLPT N3: she is moving from N4 to N3 and wants to be pushed there. Explanations are in plain, everyday English: no jargon, no exclamation marks.';
 const STYLE = 'Write for an English speaker who is learning Japanese and deciding whether to read this web novel. Use plain, everyday English. No hype, no exclamation marks, no Japanese words, no spoilers beyond the setup.';
 
@@ -90,8 +90,8 @@ ${context && context !== text ? `The passage comes from this part of the book, f
       const avoid = (body.avoid || []).slice(0, 8).map((q) => clip(q, 200));
       const out = await gemini(
         `${WRITER}
-She has just finished a chapter${book ? ` of ${JSON.stringify(book)}` : ''}. Ask her ONE question about it that she can answer in one or two short Japanese sentences.
-- Write "question" in simple, natural Japanese, friendly and short (under 30 characters). Use kanji only for common words.
+She has just finished a chapter${book ? ` of ${JSON.stringify(book)}` : ''}. Ask her ONE question about it that takes two to four Japanese sentences to answer (a reason, a feeling and why, what she would do in a character's place, a prediction), not a yes/no question.
+- Write "question" in natural Japanese at N3 level, the way a Japanese friend would ask (under 50 characters). Write words in kanji when they are normally written in kanji, including N3 kanji. Use N3 grammar where it fits naturally. Never baby-talk, never all hiragana.
 - Make it about this chapter: name a character, place or event from it. Ask what she thought or felt, how a character felt, what she would do in their place, what might happen next, or her favourite moment. Never a quiz with one right answer.
 - "hint": a natural English translation of the question.
 - "words": from the words she looked up while reading, pick up to 4 that would fit naturally in an answer, copied exactly as listed. Leave it empty if none fit.
@@ -127,10 +127,9 @@ ${avoid.length ? `Ask something different from these earlier questions: ${JSON.s
       const prompt = `${body.journal ? JOURNAL : WRITER}
 She wrote the Japanese below${body.journal ? ' in her daily journal' : ''}${question ? ` in answer to the question ${JSON.stringify(question)}` : body.journal ? '' : ' about the chapter she just read'}. Correct it so it is natural and grammatically correct.
 - Correct ALL of it: every sentence she wrote must appear in the corrected text, in the same order. Never drop or merge away a sentence, even one that is hard to fix.
-${body.journal ? `- Keep her meaning and her ideas, but bring it up to natural N3 Japanese. Fix every mistake, and where she used a simple N5/N4 way of saying something, use the N3 grammar or vocabulary a Japanese person would choose instead (for example joining short sentences with 〜ので, 〜のに, 〜ながら, 〜たら; using 〜ようになった, 〜ことにした, 〜てしまった where they fit). Write words in kanji when they are normally written in kanji. Don't go beyond N3 or make it formal.
-` : `- Keep her meaning, her ideas and her level. Change as little as possible and don't make it fancier than it needs to be.
-`}- "segments": the corrected text split into pieces, in order. Joined together, the pieces must equal the corrected text exactly. Mark each piece "changed": true if it differs from what she wrote, with "was" set to what she wrote in its place (an empty string if the piece is new). Unchanged pieces have "changed": false and "was" empty. Keep changed pieces as small as possible.
-- "note": ${body.journal ? 'two or three plain English sentences: the most useful fix, and the N3 grammar or word you used to raise it, and why it fits' : 'one or two plain English sentences about the most useful fix and why'}. Write every Japanese word, particle or ending in Japanese script, never in romaji (write な, not na). If her text was already natural, return it as one unchanged piece and say in one short sentence what works well.
+- Keep her meaning and her ideas, but bring it up to natural N3 Japanese. Fix every mistake, and where she used a simple N5/N4 way of saying something, use the N3 grammar or vocabulary a Japanese person would choose instead (for example joining short sentences with 〜ので, 〜のに, 〜ながら, 〜たら; using 〜ようになった, 〜ことにした, 〜てしまった where they fit). Write words in kanji when they are normally written in kanji. Don't go beyond N3 or make it formal.
+- "segments": the corrected text split into pieces, in order. Joined together, the pieces must equal the corrected text exactly. Mark each piece "changed": true if it differs from what she wrote, with "was" set to what she wrote in its place (an empty string if the piece is new). Unchanged pieces have "changed": false and "was" empty. Keep changed pieces as small as possible.
+- "note": two or three plain English sentences: the most useful fix, and the N3 grammar or word you used to raise it, and why it fits. Write every Japanese word, particle or ending in Japanese script, never in romaji (write な, not na). If her text was already natural, return it as one unchanged piece and say in one short sentence what works well.
 - "translation": a natural English translation of the whole corrected text.
 ${chapter ? `For context only, the end of the chapter: ${JSON.stringify(chapter)}
 ` : ''}What she wrote: ${JSON.stringify(text)}`;
@@ -151,7 +150,7 @@ ${chapter ? `For context only, the end of the chapter: ${JSON.stringify(chapter)
       const out = await gemini(
         `${body.journal ? JOURNAL : WRITER}
 You are her friendly writing tutor. She is writing ${body.journal ? 'a few lines in her daily journal about her own life' : 'a few lines about the chapter she just read'} and is stuck: she tells you, in English or a mix of English and Japanese, what she wants to say, or asks a question about how to say it. Answer her latest message directly; don't make her guess first.
-- "suggestion": ${body.journal ? 'a natural way to say what she means in Japanese at N3 level (one to three sentences), using N3 grammar and kanji where a Japanese person would' : 'the simplest natural way to say what she means in Japanese, at her level (one or two short sentences)'}. Leave it empty only when her message is a question that doesn't need a new sentence (for example "why not 変だと思う?").
+- "suggestion": a natural way to say what she means in Japanese at N3 level (one to three sentences), using N3 grammar and kanji where a Japanese person would. Leave it empty only when her message is a question that doesn't need a new sentence (for example "why not 変だと思う?").
 - "words": up to 4 words from the suggestion she may not know, each with "word" as written in the suggestion, "reading" in hiragana, and "meaning" in a few English words. Skip very basic words.
 - "explanation": one to three plain English sentences on how the sentence is built or the answer to her question. Write every Japanese word, particle or ending in Japanese script, never in romaji.
 ${question ? `The question she is answering: ${JSON.stringify(question)}
